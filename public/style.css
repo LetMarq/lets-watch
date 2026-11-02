@@ -1,0 +1,567 @@
+/* ==========================================================
+   LetsWatch · visual retrô (TV de tubo + VHS)
+   ========================================================== */
+
+:root {
+  --fundo: #15110e;
+  --superficie: #201a16;
+  --superficie-2: #2a231e;
+  --linha: #3d342c;
+  --texto: #f1e7d6;
+  --apagado: #a8998a;
+  --creme: #f3e8d2;
+  --tinta: #1f2b6e; /* caneta azul na etiqueta */
+
+  /* listras de fita VHS */
+  --vermelho: #e8443a;
+  --laranja: #f08a3c;
+  --amarelo: #f2c14e;
+  --verde: #3fb6a8;
+  --azul: #4a7bd8;
+
+  --tela-azul: #1530b5;
+  --vfd: #7dffd9; /* display de videocassete */
+
+  --fonte-logo: 'Rubik', system-ui, sans-serif;
+  --fonte: 'Space Mono', ui-monospace, 'Cascadia Code', monospace;
+  --fonte-osd: 'VT323', ui-monospace, monospace;
+  --fonte-caneta: 'Permanent Marker', 'Comic Sans MS', cursive;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+
+body {
+  background:
+    radial-gradient(ellipse at 50% -10%, #2a1f18 0%, transparent 60%),
+    var(--fundo);
+  color: var(--texto);
+  font-family: var(--fonte);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* granulado leve no fundo */
+body::before {
+  content: '';
+  position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+body > * { position: relative; z-index: 1; }
+
+a { color: inherit; }
+h1, h2, h3 { margin: 0; line-height: 1.05; }
+.escondido { display: none !important; }
+
+/* ---------- Listras VHS ---------- */
+.listras {
+  display: inline-flex; gap: 3px; transform: skewX(-18deg);
+}
+.listras i { display: block; width: 7px; height: 22px; }
+.listras i:nth-child(1) { background: var(--vermelho); }
+.listras i:nth-child(2) { background: var(--laranja); }
+.listras i:nth-child(3) { background: var(--amarelo); }
+.listras i:nth-child(4) { background: var(--verde); }
+.listras i:nth-child(5) { background: var(--azul); }
+
+.faixa-arco-iris {
+  height: 18px;
+  background: linear-gradient(
+    var(--vermelho) 0 20%, var(--laranja) 20% 40%, var(--amarelo) 40% 60%,
+    var(--verde) 60% 80%, var(--azul) 80% 100%);
+}
+
+/* ---------- Marca ---------- */
+.marca {
+  display: inline-flex; align-items: center; gap: 12px; text-decoration: none;
+  font-family: var(--fonte-logo); font-weight: 900; font-style: italic;
+  font-size: 26px; letter-spacing: -0.03em; text-transform: uppercase;
+}
+.marca-pequena { font-size: 19px; gap: 9px; }
+.marca-pequena .listras i { width: 5px; height: 16px; }
+
+/* ---------- Texto OSD (letreiro de videocassete) ---------- */
+.osd {
+  font-family: var(--fonte-osd);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #fff;
+  text-shadow:
+    0 0 6px rgba(255, 255, 255, .55),
+    2px 0 0 rgba(255, 40, 90, .45),
+    -2px 0 0 rgba(40, 200, 255, .45);
+}
+.piscar { animation: piscar 1.1s steps(1) infinite; }
+@keyframes piscar { 50% { opacity: 0; } }
+
+/* ---------- Botões ---------- */
+.botao {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 44px; padding: 0 18px; border-radius: 6px;
+  border: 1px solid #000; color: var(--texto);
+  background: linear-gradient(#3b332c, #2a241f);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 3px 0 #0b0907, 0 4px 10px rgba(0,0,0,.4);
+  font: 700 14px var(--fonte); text-transform: uppercase; letter-spacing: .04em;
+  cursor: pointer; text-decoration: none; white-space: nowrap;
+  transition: transform .05s, box-shadow .05s, filter .15s;
+}
+.botao:hover { filter: brightness(1.12); }
+.botao:active { transform: translateY(3px); box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 0 0 #0b0907; }
+.botao:disabled { opacity: .45; cursor: default; transform: none; }
+.botao:focus-visible { outline: 2px solid var(--amarelo); outline-offset: 3px; }
+.botao-principal {
+  background: linear-gradient(#ff5e4f, var(--vermelho));
+  color: #1b0806; border-color: #5d140e;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 3px 0 #6e1710, 0 4px 14px rgba(232,68,58,.35);
+}
+.botao-principal:active { box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 0 0 #6e1710; }
+.botao-perigo { color: #ff9c90; }
+.botao-pequeno { height: 36px; padding: 0 12px; font-size: 12px; }
+.botao-grande { height: 54px; padding: 0 26px; font-size: 16px; }
+
+/* ---------- Campos ---------- */
+.campo {
+  width: 100%; height: 44px; padding: 0 12px; border-radius: 4px;
+  border: 1px solid #000; background: #0e0b09; color: var(--texto);
+  box-shadow: inset 0 2px 6px rgba(0,0,0,.6);
+  font: 14px var(--fonte);
+}
+.campo:focus { outline: 2px solid var(--amarelo); outline-offset: 1px; }
+select.campo { height: 38px; width: auto; padding: 0 8px; font-size: 13px; text-transform: uppercase; }
+
+.rotulo {
+  display: block; margin-bottom: 6px;
+  font: 700 11px var(--fonte); letter-spacing: .12em; text-transform: uppercase; color: var(--apagado);
+}
+
+.link-copia { display: flex; gap: 8px; align-items: center; }
+.link-copia input { flex: 1; min-width: 0; font-size: 12px; }
+
+code { font-family: var(--fonte-osd); font-size: 1.25em; color: var(--amarelo); }
+
+/* ==========================================================
+   TV de tubo
+   ========================================================== */
+.tv {
+  position: relative;
+  background: linear-gradient(160deg, #4a4038 0%, #2f2822 55%, #231d18 100%);
+  border-radius: 28px;
+  padding: 22px;
+  display: grid; grid-template-columns: 1fr 64px; gap: 18px;
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,.12),
+    inset 0 -6px 12px rgba(0,0,0,.4),
+    0 30px 60px rgba(0,0,0,.55);
+}
+.tv::before, .tv::after { /* antenas */
+  content: ''; position: absolute; bottom: 100%; left: 42%;
+  width: 3px; height: 90px; background: linear-gradient(#cfc6ba, #6d655c);
+  border-radius: 3px; transform-origin: bottom center;
+}
+.tv::before { transform: rotate(-28deg); }
+.tv::after { transform: rotate(24deg); height: 76px; }
+
+.tela {
+  position: relative; overflow: hidden; background: #000;
+  aspect-ratio: 4 / 3;
+  border-radius: 26px / 32px;
+  box-shadow: 0 0 0 8px #120f0c, 0 0 0 10px #4c4239;
+}
+.tela-wide { aspect-ratio: 16 / 9; border-radius: 22px / 28px; }
+
+/* vidro curvo: vinheta + reflexo + scanlines */
+.vidro { position: absolute; inset: 0; pointer-events: none; z-index: 5; border-radius: inherit; }
+.vidro::before {
+  content: ''; position: absolute; inset: 0;
+  background: repeating-linear-gradient(rgba(0,0,0,.28) 0 1px, transparent 1px 3px);
+}
+.vidro::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background:
+    radial-gradient(ellipse at 30% 18%, rgba(255,255,255,.13), transparent 38%),
+    radial-gradient(ellipse at center, transparent 58%, rgba(0,0,0,.65) 100%);
+  box-shadow: inset 0 0 60px rgba(0,0,0,.8);
+}
+
+.tv-lateral { display: grid; align-content: start; justify-items: center; gap: 16px; padding-top: 6px; }
+.botao-giratorio {
+  width: 46px; height: 46px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #6c625a, #1f1a16 70%);
+  box-shadow: 0 3px 6px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.2);
+  position: relative;
+}
+.botao-giratorio::after {
+  content: ''; position: absolute; left: 50%; top: 6px; width: 3px; height: 12px;
+  margin-left: -1.5px; border-radius: 2px; background: #d9cfc2;
+}
+.botao-giratorio.b2 { transform: rotate(130deg); width: 38px; height: 38px; }
+.alto-falante {
+  width: 46px; height: 90px; border-radius: 6px;
+  background: repeating-linear-gradient(#120f0c 0 3px, #3a322b 3px 6px);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,.7);
+}
+.led { width: 9px; height: 9px; border-radius: 50%; background: #3a120f; }
+.led.aceso { background: var(--vermelho); box-shadow: 0 0 10px var(--vermelho); }
+
+/* ---------- Telas dentro da TV ---------- */
+.camada { position: absolute; inset: 0; z-index: 3; display: grid; place-content: center; justify-items: center; gap: 12px; text-align: center; padding: 20px; }
+.estatica { position: absolute; inset: 0; width: 100%; height: 100%; display: block; filter: contrast(1.3) brightness(.85); }
+.estatica-barra { /* faixa que rola na estática */
+  position: absolute; left: 0; right: 0; height: 22%; top: -25%;
+  background: linear-gradient(transparent, rgba(255,255,255,.12), transparent);
+  animation: rolar 3.2s linear infinite;
+}
+@keyframes rolar { to { top: 110%; } }
+.tela-azul { background: var(--tela-azul); }
+.tela-azul::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,30,.5));
+}
+.osd-canto { position: absolute; z-index: 4; font-size: 26px; line-height: 1; }
+.osd-canto.sup-esq { top: 18px; left: 22px; }
+.osd-canto.sup-dir { top: 18px; right: 22px; }
+.osd-canto.inf-esq { bottom: 18px; left: 22px; }
+.osd-canto.inf-dir { bottom: 18px; right: 22px; }
+.osd-grande { font-size: clamp(30px, 5vw, 48px); line-height: 1; }
+/* fundo escuro atrás do texto para ler por cima da estática */
+.camada:not(.tela-azul) .osd, .osd-canto { background: rgba(0, 0, 0, .55); padding: 2px .3em; }
+.osd-medio { font-size: 24px; line-height: 1.1; }
+.rec { color: #ff5a4e; }
+
+/* liga a TV: a imagem nasce de uma linha */
+.ligando { animation: ligar .55s ease-out; }
+@keyframes ligar {
+  0% { transform: scale(1, .004); filter: brightness(4); }
+  45% { transform: scale(1, .004); filter: brightness(4); }
+  100% { transform: scale(1, 1); filter: brightness(1); }
+}
+
+/* ==========================================================
+   Fita cassete VHS (formulário de criar sala)
+   ========================================================== */
+.fita {
+  background:
+    repeating-linear-gradient(90deg, transparent 0 22px, rgba(255,255,255,.025) 22px 24px),
+    linear-gradient(#26262a, #141416);
+  border-radius: 12px;
+  padding: 16px 16px 18px;
+  border: 1px solid #000;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.08),
+    inset 0 -3px 0 rgba(0,0,0,.5),
+    0 24px 50px rgba(0,0,0,.55);
+}
+.etiqueta {
+  background: var(--creme); color: #1b1715;
+  border-radius: 4px; overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.15);
+}
+.etiqueta-corpo { padding: 10px 14px 12px; display: flex; gap: 12px; align-items: end; }
+.etiqueta-marca {
+  font-family: var(--fonte-logo); font-weight: 900; font-style: italic; font-size: 13px;
+  text-transform: uppercase; letter-spacing: -.02em; color: #1b1715; flex: none;
+  padding-bottom: 8px;
+}
+.etiqueta-campo {
+  flex: 1; min-width: 0; width: 100%; border: 0; background: transparent; padding: 4px 2px;
+  border-bottom: 2px dashed rgba(27,23,21,.25);
+  font: 26px var(--fonte-caneta); color: var(--tinta);
+}
+.etiqueta-campo::placeholder { color: rgba(31,43,110,.35); }
+.etiqueta-campo:focus { outline: none; border-bottom-color: var(--tinta); }
+.etiqueta-titulo {
+  flex: 1; min-width: 0; font: 26px var(--fonte-caneta); color: var(--tinta);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 2px;
+}
+.etiqueta-rodape {
+  display: flex; justify-content: space-between; padding: 0 14px 8px;
+  font: 700 10px var(--fonte); letter-spacing: .14em; color: rgba(27,23,21,.55);
+}
+
+.janela-fita {
+  margin: 14px auto 0; width: 78%; height: 66px; border-radius: 8px;
+  background: linear-gradient(#0a0a0b, #19191c);
+  box-shadow: inset 0 3px 8px rgba(0,0,0,.9), 0 0 0 2px #2c2c31;
+  display: flex; align-items: center; justify-content: space-between; padding: 0 22px;
+  position: relative;
+}
+.janela-fita::before { /* a fita marrom entre os carretéis */
+  content: ''; position: absolute; left: 50px; right: 50px; top: 50%; height: 10px; margin-top: -5px;
+  background: #3b2618; border-radius: 2px;
+}
+.carretel {
+  position: relative; width: 46px; height: 46px; border-radius: 50%;
+  background: radial-gradient(circle, #e9e2d6 0 7px, transparent 7.5px),
+    repeating-conic-gradient(#e9e2d6 0 14deg, #4a3020 14deg 60deg);
+  box-shadow: 0 0 0 5px #3b2618;
+}
+.carretel.cheio { box-shadow: 0 0 0 10px #3b2618; }
+.gravando .carretel { animation: girar 1.4s linear infinite; }
+@keyframes girar { to { transform: rotate(360deg); } }
+
+/* ==========================================================
+   Página inicial
+   ========================================================== */
+.pagina-inicio { min-height: 100%; display: flex; flex-direction: column; }
+.topo { display: flex; align-items: center; justify-content: space-between; padding: 22px 28px; }
+.topo .osd { font-size: 22px; color: var(--apagado); text-shadow: none; }
+
+.inicio {
+  flex: 1; width: 100%; max-width: 1160px; margin: 0 auto; padding: 24px 28px 72px;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; align-items: start;
+}
+.inicio h1 {
+  font-family: var(--fonte-logo); font-weight: 900; font-style: italic; text-transform: uppercase;
+  font-size: clamp(38px, 5.4vw, 66px); letter-spacing: -.035em; line-height: .95;
+}
+.inicio h1 .destaque {
+  background: linear-gradient(90deg, var(--vermelho), var(--laranja), var(--amarelo));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.chamada { color: var(--apagado); font-size: 15px; margin: 18px 0 30px; max-width: 46ch; }
+.coluna-tv { display: grid; gap: 28px; padding-top: 70px; }
+
+.formulario-fita { display: grid; gap: 16px; }
+.formulario-fita .botao { width: 100%; }
+
+.resultado { display: grid; gap: 16px; }
+.resultado .aviso { font-size: 12px; color: var(--apagado); margin: -6px 0 0; }
+
+/* capa da fita com a lista "Lado A" */
+.capa {
+  background: var(--creme); color: #1b1715; border-radius: 4px; overflow: hidden;
+  box-shadow: 0 14px 30px rgba(0,0,0,.45); transform: rotate(-1.2deg);
+}
+.capa-topo {
+  display: flex; justify-content: space-between; align-items: center;
+  background: #1b1715; color: var(--creme); padding: 8px 14px;
+  font: 700 11px var(--fonte); letter-spacing: .16em; text-transform: uppercase;
+}
+.capa ol { list-style: none; margin: 0; padding: 12px 14px 14px; display: grid; gap: 8px; }
+.capa li {
+  display: grid; grid-template-columns: 30px 1fr; gap: 8px; font-size: 13px; line-height: 1.4;
+  padding-bottom: 8px; border-bottom: 1px dashed rgba(27,23,21,.22);
+}
+.capa li:last-child { border-bottom: 0; padding-bottom: 0; }
+.capa li b { font-weight: 700; }
+.capa .faixa { font: 22px/1 var(--fonte-osd); color: var(--vermelho); }
+.capa code { color: var(--tinta); font-size: 1.3em; }
+
+@media (max-width: 880px) {
+  .inicio { grid-template-columns: minmax(0, 1fr); gap: 40px; padding: 4px 18px 56px; }
+  .topo { padding: 18px; }
+  .topo .osd { display: none; }
+  .coluna-tv { padding-top: 64px; }
+}
+
+/* ==========================================================
+   Painel do apresentador
+   ========================================================== */
+.painel { min-height: 100%; display: grid; grid-template-rows: auto 1fr; }
+.painel-topo {
+  display: flex; align-items: center; gap: 16px; padding: 14px 22px;
+  border-bottom: 1px solid #000; box-shadow: 0 1px 0 rgba(255,255,255,.05);
+  background: linear-gradient(#211b17, #191411);
+}
+.painel-topo .espaco { flex: 1; }
+
+/* lombada da fita com o título escrito à caneta */
+.lombada {
+  display: flex; align-items: center; min-width: 0; flex: 0 1 460px;
+  background: var(--creme); border-radius: 3px; overflow: hidden; height: 40px;
+}
+.lombada .faixa-arco-iris { width: 16px; height: 100%; flex: none;
+  background: linear-gradient(90deg, var(--vermelho) 0 20%, var(--laranja) 20% 40%, var(--amarelo) 40% 60%, var(--verde) 60% 80%, var(--azul) 80% 100%); }
+.titulo-live {
+  flex: 1; min-width: 0; border: 0; background: transparent; padding: 0 12px;
+  font: 22px var(--fonte-caneta); color: var(--tinta); height: 100%;
+}
+.titulo-live::placeholder { color: rgba(31,43,110,.35); }
+.titulo-live:focus { outline: none; box-shadow: inset 0 -3px 0 var(--tinta); }
+
+.status {
+  font: 22px/1 var(--fonte-osd); text-transform: uppercase; letter-spacing: .05em;
+  padding: 6px 10px; border-radius: 4px; background: #0b0908; color: var(--apagado);
+  box-shadow: inset 0 1px 4px rgba(0,0,0,.8); white-space: nowrap;
+}
+.status-ok { color: var(--vfd); text-shadow: 0 0 8px rgba(125,255,217,.5); }
+.status-alerta { color: var(--amarelo); }
+.status-ao-vivo { color: #ff6a5e; text-shadow: 0 0 8px rgba(255,90,78,.6); }
+
+.painel-corpo {
+  display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 26px; padding: 26px;
+  max-width: 1440px; width: 100%; margin: 0 auto; align-items: start;
+}
+.monitor { grid-template-columns: 1fr; padding: 18px 18px 40px; border-radius: 22px; }
+.monitor::before, .monitor::after { display: none; }
+.monitor-rodape {
+  position: absolute; left: 0; right: 0; bottom: 12px; display: flex; justify-content: space-between;
+  align-items: center; padding: 0 28px;
+}
+.monitor-rodape .osd { font-size: 16px; color: #8d8174; text-shadow: none; }
+.tela video { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+.vazio-conteudo { z-index: 6; }
+.vazio-conteudo .botao { margin-top: 6px; }
+.vazio-conteudo .nota { color: #e6e6e6; max-width: 42ch; }
+
+/* frente do videocassete */
+.deck {
+  background: linear-gradient(#2c2622, #1c1714);
+  border: 1px solid #000; border-radius: 10px; padding: 16px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 18px 40px rgba(0,0,0,.45);
+  display: grid; gap: 16px;
+}
+.deck-titulo {
+  display: flex; justify-content: space-between; align-items: center;
+  font: 700 11px var(--fonte); letter-spacing: .16em; text-transform: uppercase; color: var(--apagado);
+}
+.visor {
+  background: #050605; border-radius: 6px; padding: 12px 14px;
+  box-shadow: inset 0 2px 10px rgba(0,0,0,.9), 0 0 0 1px #000, 0 1px 0 rgba(255,255,255,.06);
+  display: flex; align-items: end; justify-content: space-between; gap: 10px;
+}
+.visor-numero {
+  font: 64px/0.8 var(--fonte-osd); color: var(--vfd);
+  text-shadow: 0 0 10px rgba(125,255,217,.55);
+}
+.visor-rotulo { font: 20px/1 var(--fonte-osd); color: var(--vfd); opacity: .75; text-transform: uppercase; text-align: right; }
+.teclas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.alternar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 0 0; border-top: 1px solid rgba(0,0,0,.6); box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+  font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+}
+.alternar small { display: block; color: var(--apagado); font-size: 11px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.chave { position: relative; width: 46px; height: 24px; flex: none; }
+.chave input { opacity: 0; width: 0; height: 0; position: absolute; }
+.chave span {
+  position: absolute; inset: 0; border-radius: 4px; cursor: pointer;
+  background: #0b0908; box-shadow: inset 0 2px 5px rgba(0,0,0,.9);
+}
+.chave span::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 3px;
+  background: linear-gradient(#9a8f84, #5f564e); box-shadow: 0 2px 3px rgba(0,0,0,.5);
+  transition: transform .12s;
+}
+.chave input:checked + span { background: #3a0f0b; box-shadow: inset 0 2px 5px rgba(0,0,0,.9), 0 0 10px rgba(232,68,58,.35); }
+.chave input:checked + span::after { transform: translateX(22px); background: linear-gradient(#ff7a6e, var(--vermelho)); }
+.chave input:focus-visible + span { outline: 2px solid var(--amarelo); outline-offset: 2px; }
+.nota { font-size: 11px; color: var(--apagado); margin: 0; line-height: 1.5; }
+
+@media (max-width: 980px) {
+  .painel-corpo { grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .painel-topo { flex-wrap: wrap; }
+  .lombada { order: 5; flex-basis: 100%; }
+}
+
+@media (max-width: 640px) {
+  .osd-canto { font-size: 18px; }
+  .osd-canto.sup-esq, .osd-canto.inf-esq { left: 16px; }
+  .osd-canto.sup-dir { right: 16px; }
+  #previa-rotulo { display: none; }
+  .vazio-conteudo .osd-grande { font-size: 26px; }
+  .vazio-conteudo .botao-grande { height: 46px; font-size: 14px; padding: 0 16px; }
+  .vazio-conteudo .osd-medio { display: none; }
+  .tv { padding: 16px; gap: 12px; grid-template-columns: 1fr 48px; }
+  .botao-giratorio { width: 36px; height: 36px; }
+  .botao-giratorio.b2 { width: 30px; height: 30px; }
+  .alto-falante { width: 34px; height: 64px; }
+  .etiqueta-campo, .etiqueta-titulo { font-size: 21px; }
+  .monitor { grid-template-columns: 1fr; padding: 12px 12px 32px; }
+  .monitor-rodape { bottom: 8px; padding: 0 18px; }
+  .barra-baixo .marca { display: none; }
+  .barra-baixo { gap: 6px; }
+}
+
+/* ---------- Tela azul de mensagem (carregando, erro, encerrada) ---------- */
+.tela-mensagem {
+  position: fixed; inset: 0; z-index: 50;
+  display: grid; place-content: center; justify-items: center; gap: 16px; text-align: center; padding: 24px;
+  background: var(--tela-azul);
+}
+.tela-mensagem::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(rgba(0,0,0,.18) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, transparent 50%, rgba(0,0,20,.6));
+}
+.tela-mensagem > * { position: relative; }
+.tela-mensagem h1 { font-size: clamp(34px, 6vw, 60px); line-height: 1; }
+.tela-mensagem p { margin: 0; max-width: 46ch; font-size: 24px; line-height: 1.2; }
+.tela-mensagem .botao { margin-top: 10px; }
+
+/* ==========================================================
+   Página de assistir
+   ========================================================== */
+.pagina-ver { background: #000; overflow: hidden; }
+.pagina-ver::before { display: none; }
+.palco { position: fixed; inset: 0; background: #000; }
+.palco video { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+.palco.preencher video { object-fit: cover; }
+.palco.ocioso { cursor: none; }
+
+/* efeito CRT por cima do vídeo (dá para desligar) */
+.efeito-crt { position: absolute; inset: 0; pointer-events: none; z-index: 1; display: none; }
+.palco.crt .efeito-crt { display: block; }
+.efeito-crt::before {
+  content: ''; position: absolute; inset: 0;
+  background: repeating-linear-gradient(rgba(0,0,0,.16) 0 1px, transparent 1px 3px);
+  animation: tremer 6s steps(60) infinite;
+}
+.efeito-crt::after {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse at center, transparent 62%, rgba(0,0,0,.55) 100%);
+}
+@keyframes tremer { 50% { opacity: .85; } }
+
+.barra-topo, .barra-baixo {
+  position: absolute; left: 0; right: 0; display: flex; align-items: center; gap: 14px;
+  padding: 18px 22px; transition: opacity .25s; z-index: 3;
+}
+.barra-topo { top: 0; background: linear-gradient(rgba(0,0,0,.65), transparent); }
+.barra-baixo { bottom: 0; background: linear-gradient(transparent, rgba(0,0,0,.75)); }
+.palco.ocioso .barra-topo, .palco.ocioso .barra-baixo { opacity: 0; }
+.barra-topo .espaco, .barra-baixo .espaco { flex: 1; }
+.osd-play { font-size: 30px; line-height: 1; white-space: nowrap; }
+.barra-topo .titulo { font-size: 30px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.osd-direita { font-size: 26px; line-height: 1; white-space: nowrap; display: flex; gap: 16px; }
+
+.icone-botao {
+  height: 42px; min-width: 42px; padding: 0 10px; border-radius: 5px; border: 1px solid #000;
+  background: linear-gradient(rgba(70,62,55,.85), rgba(35,30,26,.85));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 2px 0 rgba(0,0,0,.6);
+  color: #fff; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font: 22px/1 var(--fonte-osd); text-transform: uppercase; flex: none;
+}
+.icone-botao:hover { filter: brightness(1.2); }
+.icone-botao:active { transform: translateY(2px); box-shadow: inset 0 1px 0 rgba(255,255,255,.1); }
+.icone-botao svg { width: 20px; height: 20px; }
+.icone-botao.ativo { background: linear-gradient(#ff6a5c, var(--vermelho)); color: #1b0806; }
+
+.aviso-palco { position: absolute; inset: 0; z-index: 2; overflow: hidden; }
+.aviso-palco .camada { z-index: 3; }
+.aviso-palco .osd-grande { font-size: clamp(36px, 7vw, 76px); }
+.aviso-palco .osd-medio { font-size: clamp(20px, 2.6vw, 28px); max-width: 30ch; }
+.aviso-palco .vidro::before { background: repeating-linear-gradient(rgba(0,0,0,.25) 0 2px, transparent 2px 4px); }
+
+.ativar-som { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); z-index: 4; }
+
+/* Tela cheia: só a tela do apresentador, sem barras, letreiros nem efeito CRT */
+.palco.tela-cheia { cursor: none; }
+.palco.tela-cheia .barra-topo,
+.palco.tela-cheia .barra-baixo,
+.palco.tela-cheia .efeito-crt,
+.palco.tela-cheia .ativar-som { display: none !important; }
+
+@media (max-width: 640px) {
+  .barra-topo, .barra-baixo { padding: 12px; gap: 8px; }
+  .osd-play { display: none; }
+  .barra-topo .titulo, .osd-direita { font-size: 22px; }
+  .icone-botao { height: 38px; min-width: 38px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .estatica-barra, .piscar, .efeito-crt::before, .gravando .carretel { animation: none; }
+  .ligando { animation: none; }
+}

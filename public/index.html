@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LetsWatch</title>
+  <meta name="description" content="Compartilhe sua tela com os amigos por um link. Direto do navegador, de pessoa para pessoa.">
+  <meta name="theme-color" content="#15110e">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Rubik:ital,wght@1,900&family=Space+Mono:wght@400;700&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="pagina-inicio">
+    <header class="topo">
+      <a class="marca" href="/">LetsWatch <span class="listras" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></a>
+      <span class="osd">Rebobine antes de devolver</span>
+    </header>
+
+    <main class="inicio">
+      <section>
+        <h1>Aperte o <span class="destaque">play</span><br>junto com<br>a galera.</h1>
+        <p class="chamada">Compartilhe a tela inteira ou uma janela e mande o link. Quem abrir assiste na hora, direto no navegador. Sem login, sem instalar nada.</p>
+
+        <div id="formulario">
+          <form id="form-criar" class="formulario-fita">
+            <div class="fita" id="fita">
+              <div class="etiqueta">
+                <div class="faixa-arco-iris"></div>
+                <div class="etiqueta-corpo">
+                  <span class="etiqueta-marca">LetsWatch</span>
+                  <input class="etiqueta-campo" id="titulo" name="titulo" maxlength="80"
+                         placeholder="título da live..." aria-label="Título da live (opcional)" autocomplete="off">
+                </div>
+                <div class="etiqueta-rodape"><span>T-120 · VHS</span><span>SP</span></div>
+              </div>
+              <div class="janela-fita" aria-hidden="true"><span class="carretel cheio"></span><span class="carretel"></span></div>
+            </div>
+            <button class="botao botao-principal botao-grande" type="submit">● Gravar fita e criar sala</button>
+          </form>
+        </div>
+
+        <div id="resultado" class="resultado escondido">
+          <div class="fita">
+            <div class="etiqueta">
+              <div class="faixa-arco-iris"></div>
+              <div class="etiqueta-corpo">
+                <span class="etiqueta-marca">LetsWatch</span>
+                <span class="etiqueta-titulo" id="etiqueta-titulo"></span>
+              </div>
+              <div class="etiqueta-rodape"><span id="etiqueta-codigo"></span><span>SP</span></div>
+            </div>
+          </div>
+          <div>
+            <label class="rotulo" for="link-publico">Link para quem vai assistir</label>
+            <div class="link-copia">
+              <input class="campo" id="link-publico" readonly>
+              <button class="botao" type="button" data-copiar="link-publico">Copiar</button>
+            </div>
+          </div>
+          <div>
+            <label class="rotulo" for="link-apresentador">Seu link de apresentador</label>
+            <div class="link-copia">
+              <input class="campo" id="link-apresentador" readonly>
+              <button class="botao" type="button" data-copiar="link-apresentador">Copiar</button>
+            </div>
+          </div>
+          <p class="aviso">Não compartilhe o link de apresentador: quem tiver ele consegue transmitir na sala.</p>
+          <a class="botao botao-principal botao-grande" id="abrir-painel" href="#">▶ Abrir painel do apresentador</a>
+        </div>
+      </section>
+
+      <section class="coluna-tv">
+        <div class="tv">
+          <div class="tela">
+            <canvas class="estatica" id="estatica" aria-hidden="true"></canvas>
+            <div class="estatica-barra" id="estatica-barra"></div>
+            <div class="camada" id="tv-sem-sinal">
+              <span class="osd osd-grande">Sem sinal</span>
+            </div>
+            <div class="camada tela-azul escondido" id="tv-pronta">
+              <span class="osd osd-grande">▶ Fita pronta</span>
+              <span class="osd osd-medio">abra o painel e aperte play</span>
+            </div>
+            <span class="osd osd-canto sup-dir">CH 03</span>
+            <span class="osd osd-canto inf-esq piscar">12:00</span>
+            <div class="vidro"></div>
+          </div>
+          <div class="tv-lateral" aria-hidden="true">
+            <span class="botao-giratorio"></span>
+            <span class="botao-giratorio b2"></span>
+            <span class="alto-falante"></span>
+            <span class="led aceso"></span>
+          </div>
+        </div>
+
+        <div class="capa">
+          <div class="capa-topo"><span>Lado A</span><span>Como funciona</span></div>
+          <ol>
+            <li><span class="faixa">01</span><span>Digite <code>/live</code> no Discord ou grave a fita aqui ao lado</span></li>
+            <li><span class="faixa">02</span><span>Abra o <b>painel do apresentador</b> e aperte <b>Apresentar tela</b></span></li>
+            <li><span class="faixa">03</span><span>Escolha a <b>tela inteira</b>, uma <b>janela</b> ou uma <b>guia</b></span></li>
+            <li><span class="faixa">04</span><span>A galera entra pelo <b>link público</b> e assiste junto</span></li>
+          </ol>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="/js/home.js"></script>
+</body>
+</html>
