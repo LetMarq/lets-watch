@@ -20,7 +20,7 @@ Apresentador (navegador) ──── vídeo direto (WebRTC) ────► cad
 1. **Sinalização (PeerJS):** o apresentador se registra com o nome `letswatch-<código>`. Quem abre `/ver/<código>` sabe esse nome e pede para conectar. O servidor do PeerJS só faz a apresentação inicial.
 2. **STUN:** cada navegador descobre o próprio IP público (servidores gratuitos do Google).
 3. **Conexão direta:** os dois navegadores "furam" os roteadores e o vídeo passa a ir direto.
-4. **TURN (opcional):** se a rede de alguém for muito restrita e a conexão direta falhar, um servidor TURN repassa o vídeo. Veja [TURN](#turn-opcional).
+4. **TURN:** se a rede de alguém for muito restrita e a conexão direta falhar, um servidor TURN repassa o vídeo. Veja [TURN](#turn-quando-o-espectador-não-consegue-conectar).
 
 O link de apresentador tem uma chave (`?k=...`) que é uma assinatura do código da sala com o `LETSWATCH_SECRET`. Assim não precisamos de banco de dados.
 
@@ -129,17 +129,35 @@ No painel dá para **trocar de tela** sem derrubar ninguém, ligar o **microfone
 - **Privacidade:** por ser direto, as pessoas da live podem ver o IP público umas das outras. Entre amigos, tudo bem.
 - **Servidor público do PeerJS:** é gratuito e não tem garantia. Se um dia ficar instável, dá para hospedar o seu (variáveis `PEER_*`).
 
-## TURN (opcional)
+## TURN: quando o espectador não consegue conectar
 
-Se alguém ficar preso em "Carregando a tela..." (comum em redes de empresa, faculdade ou alguns 4G), a conexão direta foi bloqueada. Crie uma conta num serviço de TURN com plano gratuito (por exemplo Metered ou Cloudflare) e cadastre na Vercel:
+Se o painel mostra **0 pessoas assistindo** mesmo com alguém no link, ou o espectador vê **"Sem conexão direta"**, a rede de alguém bloqueou a conexão direta. Isso é comum em internet de operadora com IP compartilhado, 4G, empresa e faculdade. A solução é um servidor **TURN**, que repassa o vídeo só para quem não consegue conectar direto.
 
-```
-TURN_URL=turn:endereco-do-servidor:3478
-TURN_USERNAME=usuario
-TURN_CREDENTIAL=senha
-```
+### Padrão: Open Relay (grátis, sem cadastro)
 
-Só o tráfego de quem não consegue conexão direta passa pelo TURN.
+Se você não configurar nenhum TURN, o site usa sozinho o servidor público e gratuito do [Open Relay](https://www.metered.ca/tools/openrelay/), da Metered. Não precisa de conta, cartão nem variável na Vercel. Por ser um servidor público e compartilhado, ele não tem garantia: se um dia parar de funcionar, use uma das opções abaixo.
+
+### Cloudflare (1.000 GB grátis por mês, pede cartão)
+
+1. Crie uma conta grátis em https://dash.cloudflare.com.
+2. No menu, abra **Realtime** (em algumas contas aparece como **Calls**) → **TURN Server** → **Create**.
+3. Dê um nome (ex.: `letswatch`) e crie. A Cloudflare mostra o **Turn Token ID** e o **API Token**. Copie os dois na hora, porque o token só aparece uma vez.
+4. Na Vercel, em **Settings → Environment Variables**, adicione:
+   ```
+   CF_TURN_KEY_ID=o Turn Token ID
+   CF_TURN_API_TOKEN=o API Token
+   ```
+5. Faça **Deployments → ⋯ → Redeploy**.
+
+O site gera uma senha temporária do TURN para cada pessoa que abre a página, então o token da Cloudflare nunca vai para o navegador.
+
+### ExpressTURN (1.000 GB grátis por mês, usuário e senha fixos)
+
+Crie a conta em https://expressturn.com e cadastre na Vercel `TURN_URL` (ex.: `turn:relay1.expressturn.com:3478`), `TURN_USERNAME` e `TURN_CREDENTIAL` com os dados do painel. Depois, faça o Redeploy.
+
+### Metered com conta própria
+
+Crie uma conta em https://dashboard.metered.ca/signup?tool=turnserver, copie a URL de credenciais (formato `https://SEU-APP.metered.live/api/v1/turn/credentials?apiKey=...`) e cadastre na Vercel como `METERED_TURN_URL`. Depois, faça o Redeploy.
 
 ## Ideias para depois
 

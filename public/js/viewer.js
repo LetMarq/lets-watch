@@ -44,6 +44,7 @@ let conexao = null;
 let chamada = null;
 let tentativa = null;
 let encerrada = false;
+let temTurn = false;
 
 // ---------- Telas de espera ----------
 // 'estatica' = TV fora do ar (sem sinal / sintonizando)
@@ -92,13 +93,23 @@ function conectarAoApresentador() {
   const conn = peer.connect(idApresentador, { reliable: true });
   conexao = conn;
 
-  // Se não abrir em alguns segundos, tenta de novo.
+  // Se não abrir em alguns segundos, o apresentador existe mas a rede
+  // bloqueou a conexão direta. Avisa e tenta de novo.
   const limite = setTimeout(() => {
     if (!conn.open && conexao === conn) {
       conn.close();
+      if (!el.video.srcObject) {
+        mostrarAviso(
+          'Sem conexão direta',
+          temTurn
+            ? 'A rede bloqueou a conexão com o apresentador. Tentando de novo...'
+            : 'A rede bloqueou a conexão com o apresentador. Avise quem criou o site: falta configurar o servidor TURN (veja o README).',
+          'azul',
+        );
+      }
       agendarNovaTentativa();
     }
-  }, 10000);
+  }, 12000);
 
   conn.on('open', () => clearTimeout(limite));
   conn.on('data', tratarMensagem);
@@ -283,6 +294,7 @@ async function iniciar() {
 
   mostrarAviso('Sintonizando...');
   const config = await carregarConfig();
+  temTurn = Boolean(config.temTurn);
   peer = new Peer(opcoesDoPeer(config));
 
   peer.on('open', () => conectarAoApresentador());
