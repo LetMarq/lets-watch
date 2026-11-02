@@ -121,6 +121,8 @@ O script mostra um link de convite. Abra, escolha o seu servidor e autorize. Ago
 
 No painel dá para **trocar de tela** sem derrubar ninguém, ligar o **microfone** (ou outra entrada de som), mudar a **qualidade** (até 1080p a 60 FPS nas opções de jogo) e ver **quantas pessoas estão assistindo**.
 
+**Reações:** quem assiste pode mandar emojis (👍 ❤️ 😂 😮 👏 🔥 🎉 😢) pelo botão 😀. Eles sobem flutuando na tela de todo mundo e no monitor do painel. O apresentador pode desligar na chave **Reações**. Só os emojis da lista são aceitos, e cada pessoa pode mandar no máximo 6 a cada 3 segundos. Em tela cheia, os emojis não aparecem.
+
 **Economia automática:** se ninguém assistir por 5 minutos, o compartilhamento de tela pausa sozinho. Se a sala ficar 30 minutos sem compartilhar e sem ninguém, ela fecha e desconecta do servidor. Na página de assistir há som, preencher a tela, picture-in-picture e tela cheia (atalhos **F** e **M**).
 
 ### Limitações

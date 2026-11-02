@@ -551,6 +551,40 @@ code { font-family: var(--fonte-osd); font-size: 1.25em; color: var(--amarelo); 
 .aviso-palco .osd-medio { font-size: clamp(20px, 2.6vw, 28px); max-width: 30ch; }
 .aviso-palco .vidro::before { background: repeating-linear-gradient(rgba(0,0,0,.25) 0 2px, transparent 2px 4px); }
 
+/* Reações (emojis subindo) */
+.camada-reacoes { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 4; }
+.emoji-voando {
+  position: absolute; bottom: 90px; font-size: 42px; line-height: 1;
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,.5));
+  animation: emoji-subir 3.4s cubic-bezier(.2,.7,.3,1) forwards;
+}
+.tela .emoji-voando { bottom: 20px; font-size: 32px; }
+@keyframes emoji-subir {
+  0% { transform: translate(0, 0) scale(.5); opacity: 0; }
+  12% { transform: translate(0, -24px) scale(1.15); opacity: 1; }
+  70% { opacity: 1; }
+  100% { transform: translate(var(--desvio), -55vh) scale(1); opacity: 0; }
+}
+.palco.tela-cheia .camada-reacoes, .palco.tela-cheia .bandeja-reacoes { display: none !important; }
+.bandeja-reacoes {
+  position: absolute; left: 22px; bottom: 74px; z-index: 5;
+  display: flex; gap: 4px; padding: 6px; border-radius: 10px;
+  background: rgba(20,17,14,.92); border: 1px solid #000; box-shadow: 0 10px 30px rgba(0,0,0,.5);
+}
+.bandeja-reacoes button {
+  width: 44px; height: 44px; border: 0; border-radius: 8px; background: transparent;
+  font-size: 26px; cursor: pointer; transition: transform .1s, background .1s;
+}
+.bandeja-reacoes button:hover { background: rgba(255,255,255,.1); transform: scale(1.15); }
+.bandeja-reacoes button:active { transform: scale(.95); }
+.palco.ocioso .bandeja-reacoes { opacity: 0; pointer-events: none; }
+#botao-reacoes { font-size: 20px; }
+@media (max-width: 640px) {
+  .bandeja-reacoes { left: 8px; right: 8px; bottom: 64px; flex-wrap: wrap; justify-content: center; }
+  .bandeja-reacoes button { width: 40px; height: 40px; font-size: 24px; }
+  .ativar-som { bottom: 130px; }
+}
+
 .ativar-som { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); z-index: 4; }
 
 /* Tela cheia: só a tela do apresentador, sem barras, letreiros nem efeito CRT */

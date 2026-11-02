@@ -83,6 +83,22 @@ export async function copiarTexto(texto, botao) {
   }
 }
 
+// ---------- Reações (emojis) ----------
+// Só estes emojis são aceitos: o apresentador ignora qualquer outra coisa.
+export const REACOES = ['👍', '❤️', '😂', '😮', '👏', '🔥', '🎉', '😢'];
+
+// Solta um emoji que sobe flutuando dentro de "camada" e some sozinho.
+export function soltarEmoji(camada, emoji) {
+  if (!camada || !REACOES.includes(emoji)) return;
+  const el = document.createElement('span');
+  el.className = 'emoji-voando';
+  el.textContent = emoji;
+  el.style.left = `${62 + Math.random() * 30}%`;
+  el.style.setProperty('--desvio', `${Math.round(Math.random() * 80 - 40)}px`);
+  el.addEventListener('animationend', () => el.remove());
+  camada.append(el);
+}
+
 export function plural(n, singular, pluralTexto) {
   return `${n} ${n === 1 ? singular : pluralTexto}`;
 }

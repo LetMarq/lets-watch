@@ -5,7 +5,7 @@
 //    Se ele ainda não chegou, tenta de novo a cada poucos segundos.
 // 3. Quando o apresentador compartilha a tela, ele liga para cá e o vídeo
 //    aparece no <video>.
-import { carregarConfig, codigoDaUrl, idDoApresentador, opcoesDoPeer, plural } from './common.js';
+import { REACOES, carregarConfig, codigoDaUrl, idDoApresentador, opcoesDoPeer, plural, soltarEmoji } from './common.js';
 import { criarEstatica } from './retro.js';
 
 const INTERVALO_TENTATIVA = 3000;
@@ -34,6 +34,9 @@ const el = {
   botaoPreencher: $('botao-preencher'),
   botaoPip: $('botao-pip'),
   botaoTelaCheia: $('botao-tela-cheia'),
+  camadaReacoes: $('reacoes'),
+  bandeja: $('bandeja-reacoes'),
+  botaoReacoes: $('botao-reacoes'),
 };
 
 const codigo = codigoDaUrl();
@@ -46,6 +49,7 @@ let chamada = null;
 let tentativa = null;
 let encerrada = false;
 let temTurn = false;
+let reacoesPermitidas = false;
 
 // ---------- Telas de espera ----------
 // 'estatica' = TV fora do ar (sem sinal / sintonizando)
@@ -114,12 +118,16 @@ function conectarAoApresentador() {
     }
   }, 12000);
 
-  conn.on('open', () => clearTimeout(limite));
+  conn.on('open', () => {
+    clearTimeout(limite);
+    atualizarBotaoReacoes();
+  });
   conn.on('data', tratarMensagem);
   conn.on('close', () => {
     clearTimeout(limite);
     if (conexao !== conn || encerrada) return;
     conexao = null;
+    atualizarBotaoReacoes();
     pararVideo();
     aguardandoApresentador();
     agendarNovaTentativa();
@@ -128,6 +136,11 @@ function conectarAoApresentador() {
 
 function tratarMensagem(mensagem) {
   if (encerrada) return;
+  if (mensagem?.tipo === 'reacao') {
+    // O nosso próprio emoji já apareceu na hora do clique.
+    if (mensagem.de !== peer?.id) soltarEmoji(el.camadaReacoes, mensagem.emoji);
+    return;
+  }
   if (mensagem?.tipo === 'encerrada') {
     encerrar(mensagem.motivo);
     return;
@@ -139,6 +152,8 @@ function tratarMensagem(mensagem) {
   document.title = `${titulo} · LetsWatch`;
   el.espectadores.textContent = plural(mensagem.espectadores, 'pessoa', 'pessoas');
   definirAoVivo(mensagem.aoVivo);
+  reacoesPermitidas = mensagem.reacoes !== false;
+  atualizarBotaoReacoes();
 
   if (!mensagem.aoVivo) {
     pararVideo();
@@ -177,6 +192,7 @@ function pararVideo() {
 
 function encerrar(motivo = '') {
   encerrada = true;
+  atualizarBotaoReacoes();
   clearTimeout(tentativa);
   pararVideo();
   definirAoVivo(false);
@@ -258,6 +274,47 @@ function alternarPreencher() {
   const ativo = el.palco.classList.toggle('preencher');
   el.botaoPreencher.classList.toggle('ativo', ativo);
 }
+
+// ---------- Reações (emojis) ----------
+
+for (const emoji of REACOES) {
+  const botao = document.createElement('button');
+  botao.type = 'button';
+  botao.textContent = emoji;
+  botao.setAttribute('aria-label', `Enviar ${emoji}`);
+  botao.addEventListener('click', () => enviarReacao(emoji));
+  el.bandeja.append(botao);
+}
+
+function abrirBandeja(aberta) {
+  el.bandeja.classList.toggle('escondido', !aberta);
+  el.botaoReacoes.classList.toggle('ativo', aberta);
+  el.botaoReacoes.setAttribute('aria-expanded', String(aberta));
+}
+
+// O botão só aparece com o apresentador conectado e as reações ligadas.
+function atualizarBotaoReacoes() {
+  const pode = reacoesPermitidas && Boolean(conexao?.open) && !encerrada;
+  el.botaoReacoes.classList.toggle('escondido', !pode);
+  if (!pode) abrirBandeja(false);
+}
+
+let ultimaReacao = 0;
+function enviarReacao(emoji) {
+  const agora = Date.now();
+  if (agora - ultimaReacao < 350 || !conexao?.open) return; // sem metralhadora de emojis
+  ultimaReacao = agora;
+  conexao.send({ tipo: 'reacao', emoji });
+  soltarEmoji(el.camadaReacoes, emoji);
+}
+
+el.botaoReacoes.addEventListener('click', (evento) => {
+  evento.stopPropagation();
+  abrirBandeja(el.bandeja.classList.contains('escondido'));
+});
+document.addEventListener('click', (evento) => {
+  if (!el.bandeja.contains(evento.target)) abrirBandeja(false);
+});
 
 // Efeito de TV de tubo (scanlines e cantos escuros). Fica salvo neste navegador.
 function definirCrt(ativo) {

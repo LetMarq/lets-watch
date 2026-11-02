@@ -53,6 +53,7 @@
           <span class="osd osd-canto sup-esq" id="osd-estado">Standby</span>
           <span class="osd osd-canto sup-dir" id="contador">00:00:00</span>
           <span class="osd osd-canto inf-esq escondido" id="previa-rotulo">Prévia · é isso que estão vendo</span>
+          <div class="camada-reacoes" id="reacoes" aria-hidden="true"></div>
           <div class="vidro"></div>
         </div>
         <div class="monitor-rodape">
@@ -83,6 +84,11 @@
           <br>• <b>Janela de um jogo ou programa:</b> no Chrome 141 ou mais novo, aparece uma opção de áudio ao escolher a janela; escolha acima se quer <b>só o som da janela</b> ou <b>todo o PC</b>. Em navegadores mais antigos, janelas vão sem som: use a tela inteira ou o VB-Cable (README).
           <br>Clique em <b>Trocar tela</b> para escolher de novo.
         </div>
+
+        <label class="alternar">
+          <span>Reações<small>Emojis de quem está assistindo</small></span>
+          <span class="chave"><input type="checkbox" id="reacoes-ativas" checked><span></span></span>
+        </label>
 
         <label class="alternar">
           <span>Microfone / som extra<small>Liga a entrada escolhida abaixo</small></span>

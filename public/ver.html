@@ -20,6 +20,7 @@
   <div class="palco crt" id="palco">
     <video id="video" autoplay muted playsinline></video>
     <div class="efeito-crt"></div>
+    <div class="camada-reacoes" id="reacoes" aria-hidden="true"></div>
 
     <!-- Telas de espera: estática (sem sinal) ou tela azul de videocassete -->
     <div class="aviso-palco" id="aviso">
@@ -45,11 +46,14 @@
 
     <button class="botao botao-principal ativar-som escondido" id="ativar-som" type="button">🔊 Ativar som</button>
 
+    <div class="bandeja-reacoes escondido" id="bandeja-reacoes" role="group" aria-label="Enviar reação"></div>
+
     <footer class="barra-baixo">
       <button class="icone-botao" id="botao-som" type="button" title="Som (M)" aria-label="Ativar ou desativar som">
         <svg id="icone-mudo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m22 9-6 6M16 9l6 6"/></svg>
         <svg id="icone-som" class="escondido" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>
       </button>
+      <button class="icone-botao escondido" id="botao-reacoes" type="button" title="Reações" aria-label="Enviar reação" aria-expanded="false">😀</button>
       <a class="marca marca-pequena" href="/" target="_blank">LetsWatch <span class="listras" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></a>
       <span class="espaco"></span>
       <button class="icone-botao ativo" id="botao-crt" type="button" title="Efeito de TV de tubo" aria-label="Efeito de TV de tubo" aria-pressed="true">CRT</button>

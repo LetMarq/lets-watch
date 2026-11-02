@@ -7,7 +7,7 @@
 // 3. Quando a tela está sendo compartilhada, o apresentador "liga" (peer.call)
 //    para cada espectador enviando o vídeo. O vídeo vai direto, de navegador
 //    para navegador.
-import { carregarConfig, codigoDaUrl, copiarTexto, idDoApresentador, opcoesDoPeer } from './common.js';
+import { REACOES, carregarConfig, codigoDaUrl, copiarTexto, idDoApresentador, opcoesDoPeer, soltarEmoji } from './common.js';
 import { criarEstatica, formatarTempo } from './retro.js';
 
 const QUALIDADES = {
@@ -45,6 +45,8 @@ const el = {
   avisoSemSom: $('aviso-sem-som'),
   entradaAudio: $('entrada-audio'),
   somJanela: $('som-janela'),
+  reacoesAtivas: $('reacoes-ativas'),
+  camadaReacoes: $('reacoes'),
 };
 
 // Economia: sem ninguém assistindo, a tela pausa sozinha e, depois de muito
@@ -118,7 +120,30 @@ function estadoAtual() {
     titulo: el.titulo.value.trim(),
     aoVivo: Boolean(fluxo),
     espectadores: espectadores.size,
+    reacoes: el.reacoesAtivas.checked,
   };
+}
+
+// ---------- Reações (emojis) ----------
+// O espectador manda o emoji para cá; se as reações estiverem ligadas,
+// repassamos para todos e mostramos no monitor. Cada pessoa pode mandar
+// no máximo 6 emojis a cada 3 segundos.
+const historicoReacoes = new Map(); // peerId → horários dos últimos emojis
+
+function podeReagir(id) {
+  const agora = Date.now();
+  const recentes = (historicoReacoes.get(id) ?? []).filter((t) => agora - t < 3000);
+  if (recentes.length >= 6) return false;
+  recentes.push(agora);
+  historicoReacoes.set(id, recentes);
+  return true;
+}
+
+function tratarMensagemDoEspectador(conn, mensagem) {
+  if (mensagem?.tipo !== 'reacao') return;
+  if (!el.reacoesAtivas.checked || !REACOES.includes(mensagem.emoji) || !podeReagir(conn.peer)) return;
+  enviarParaTodos({ tipo: 'reacao', emoji: mensagem.emoji, de: conn.peer });
+  soltarEmoji(el.camadaReacoes, mensagem.emoji);
 }
 
 function enviarParaTodos(mensagem) {
@@ -139,6 +164,7 @@ function removerEspectador(id) {
   if (!espectador) return;
   espectador.chamada?.close();
   espectadores.delete(id);
+  historicoReacoes.delete(id);
   atualizarContagem();
 }
 
@@ -223,6 +249,7 @@ function aoConectarEspectador(conn) {
     atualizarContagem();
     if (fluxo) ligarPara(conn.peer);
   });
+  conn.on('data', (mensagem) => tratarMensagemDoEspectador(conn, mensagem));
   conn.on('close', () => removerEspectador(conn.peer));
   conn.on('error', () => removerEspectador(conn.peer));
 }
@@ -626,6 +653,7 @@ el.trocar.addEventListener('click', trocarTela);
 el.parar.addEventListener('click', pararApresentacao);
 el.encerrar.addEventListener('click', encerrarLive);
 el.qualidade.addEventListener('change', aplicarQualidade);
+el.reacoesAtivas.addEventListener('change', () => enviarParaTodos(estadoAtual()));
 el.copiarLink.addEventListener('click', () => copiarTexto(el.linkPublico.value, el.copiarLink));
 el.entradaAudio.addEventListener('change', async () => {
   if (!el.microfone.checked) return;
