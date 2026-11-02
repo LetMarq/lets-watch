@@ -9,7 +9,8 @@ import { REACOES, carregarConfig, codigoDaUrl, idDoApresentador, opcoesDoPeer, p
 import { criarEstatica } from './retro.js';
 
 const INTERVALO_TENTATIVA = 3000;
-const CHAVE_CRT = 'letswatch-crt';
+// Chave nova: quem já tinha visitado com o CRT ligado por padrão também começa desligado.
+const CHAVE_CRT = 'letswatch-crt-v2';
 
 const $ = (id) => document.getElementById(id);
 const el = {
@@ -328,11 +329,12 @@ function definirCrt(ativo) {
   }
 }
 
+// Começa DESLIGADO. Só liga se a pessoa ativou o CRT antes neste navegador.
 function crtSalvo() {
   try {
-    return localStorage.getItem(CHAVE_CRT) !== '0';
+    return localStorage.getItem(CHAVE_CRT) === '1';
   } catch {
-    return true;
+    return false;
   }
 }
 
