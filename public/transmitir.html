@@ -69,9 +69,18 @@
           <span class="visor-rotulo" id="contagem-rotulo">pessoas assistindo</span>
         </div>
 
+        <p class="aviso-deck escondido" id="aviso-inatividade"></p>
+
         <div class="teclas escondido" id="controles-ao-vivo">
           <button class="botao" id="trocar" type="button">⏏ Trocar tela</button>
           <button class="botao botao-perigo" id="parar" type="button">■ Parar</button>
+        </div>
+
+        <div class="aviso-deck escondido" id="aviso-sem-som">
+          <b>🔇 Transmitindo sem o som do computador.</b>
+          <br>• <b>Guia do navegador:</b> o som vai junto.
+          <br>• <b>Tela inteira:</b> só vai com <b>"Compartilhar áudio do sistema"</b> marcado na janela de escolha (Chrome ou Edge no Windows). Clique em <b>Trocar tela</b> e marque a opção.
+          <br>• <b>Janela de um programa ou jogo:</b> o navegador nunca envia o som. Compartilhe a <b>tela inteira</b> com o áudio do sistema, ou escolha <b>"Mixagem estéreo"</b> em <b>Entrada de som</b> e ligue a chave do microfone.
         </div>
 
         <label class="alternar">
@@ -80,11 +89,20 @@
         </label>
 
         <div class="alternar">
+          <span>Entrada de som<small>Microfone ou outra fonte de áudio</small></span>
+          <select class="campo" id="entrada-audio" aria-label="Entrada de som">
+            <option value="">Padrão do sistema</option>
+          </select>
+        </div>
+
+        <div class="alternar">
           <span>Qualidade<small id="qualidade-dica"></small></span>
           <select class="campo" id="qualidade" aria-label="Qualidade">
             <option value="texto">Texto</option>
             <option value="fluido">Fluido</option>
             <option value="video">Filme</option>
+            <option value="jogo">Jogo 60fps</option>
+            <option value="jogoHd">Jogo HD 60fps</option>
           </select>
         </div>
 
@@ -96,7 +114,7 @@
           </div>
         </div>
 
-        <p class="nota" id="nota-audio">Para enviar o som do computador, marque "Compartilhar áudio" na janela de escolha. Funciona melhor ao compartilhar uma guia ou a tela inteira no Windows.</p>
+        <p class="nota" id="nota-audio">Som do computador: funciona ao compartilhar uma <b>guia</b>, ou a <b>tela inteira</b> com "Compartilhar áudio do sistema" marcado. Janelas de programas e jogos vão sem som.</p>
       </aside>
     </main>
   </div>

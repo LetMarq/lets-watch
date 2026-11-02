@@ -126,7 +126,7 @@ function conectarAoApresentador() {
 function tratarMensagem(mensagem) {
   if (encerrada) return;
   if (mensagem?.tipo === 'encerrada') {
-    encerrar();
+    encerrar(mensagem.motivo);
     return;
   }
   if (mensagem?.tipo !== 'estado') return;
@@ -172,13 +172,17 @@ function pararVideo() {
   el.ativarSom.classList.add('escondido');
 }
 
-function encerrar() {
+function encerrar(motivo = '') {
   encerrada = true;
   clearTimeout(tentativa);
   pararVideo();
   definirAoVivo(false);
   el.espectadores.textContent = '';
-  mostrarAviso('■ Fim da fita', 'A live terminou. Obrigada por assistir!', 'azul');
+  if (motivo === 'admin') {
+    mostrarAviso('■ Fim da fita', 'A live foi encerrada pelo administrador.', 'azul');
+  } else {
+    mostrarAviso('■ Fim da fita', 'A live terminou. Obrigada por assistir!', 'azul');
+  }
   setTimeout(() => peer?.destroy(), 300);
 }
 

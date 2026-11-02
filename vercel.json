@@ -1,6 +1,16 @@
 {
   "rewrites": [
-    { "source": "/ver/:codigo", "destination": "/ver.html" },
-    { "source": "/transmitir/:codigo", "destination": "/transmitir.html" }
+    {
+      "source": "/ver/:codigo",
+      "destination": "/ver.html"
+    },
+    {
+      "source": "/transmitir/:codigo",
+      "destination": "/transmitir.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/admin.html"
+    }
   ]
 }

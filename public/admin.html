@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin · LetsWatch</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#15110e">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Rubik:ital,wght@1,900&family=Space+Mono:wght@400;700&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="pagina-admin">
+    <a class="marca" href="/">LetsWatch <span class="listras" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></a>
+
+    <form class="deck admin" id="form-admin" autocomplete="off">
+      <div class="deck-titulo"><span>Controle remoto · Admin</span><span>LW-85</span></div>
+
+      <div class="visor">
+        <span class="visor-rotulo admin-visor" id="visor">Pronto</span>
+      </div>
+
+      <div>
+        <label class="rotulo" for="senha">Senha de admin</label>
+        <input class="campo" id="senha" type="password" required autocomplete="current-password">
+      </div>
+
+      <div>
+        <label class="rotulo" for="sala">Link ou código da live</label>
+        <input class="campo" id="sala" required placeholder="https://.../ver/AbC23xYz ou AbC23xYz">
+      </div>
+
+      <button class="botao botao-principal botao-grande" id="botao-encerrar" type="submit">⏻ Encerrar live</button>
+
+      <p class="nota">O código aparece no fim do link de assistir e no rodapé da mensagem do bot ("Fita AbC23xYz"). A live precisa estar aberta: o comando é enviado ao painel do apresentador, que encerra a transmissão para todos.</p>
+    </form>
+  </div>
+
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script type="module" src="/js/admin.js"></script>
+</body>
+</html>

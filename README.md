@@ -119,15 +119,28 @@ O script mostra um link de convite. Abra, escolha o seu servidor e autorize. Ago
 3. No painel, **Apresentar tela**: o navegador abre a escolha de tela inteira, janela ou guia.
 4. Os outros clicam em **Assistir**. Quem abre antes do apresentador fica esperando e entra sozinho quando a live começar.
 
-No painel dá para **trocar de tela** sem derrubar ninguém, ligar o **microfone**, mudar a **qualidade** e ver **quantas pessoas estão assistindo**. Na página de assistir há som, preencher a tela, picture-in-picture e tela cheia (atalhos **F** e **M**).
+No painel dá para **trocar de tela** sem derrubar ninguém, ligar o **microfone** (ou outra entrada de som), mudar a **qualidade** (até 1080p a 60 FPS nas opções de jogo) e ver **quantas pessoas estão assistindo**.
+
+**Economia automática:** se ninguém assistir por 5 minutos, o compartilhamento de tela pausa sozinho. Se a sala ficar 30 minutos sem compartilhar e sem ninguém, ela fecha e desconecta do servidor. Na página de assistir há som, preencher a tela, picture-in-picture e tela cheia (atalhos **F** e **M**).
 
 ### Limitações
 
 - **Apresentar só no computador** (Chrome, Edge ou Firefox). Assistir funciona em qualquer aparelho.
-- **Som do computador:** marque "Compartilhar áudio" na janela de escolha. Funciona ao compartilhar uma **guia** (Chrome/Edge) ou a **tela inteira no Windows**. Ao compartilhar uma janela, normalmente vai sem som.
+- **Som do computador:** ao compartilhar uma **guia**, o som vai junto. Na **tela inteira**, marque "Compartilhar áudio do sistema" na janela de escolha (Chrome/Edge no Windows). **Janelas de programas e jogos** vão sem som: compartilhe a tela inteira com o áudio do sistema, ou escolha "Mixagem estéreo" em **Entrada de som** no painel.
+- **60 FPS:** as opções de jogo pedem bastante upload (cerca de 5 a 7 Mbps por pessoa assistindo) e gastam mais cota do TURN.
 - **Upload do apresentador:** ele envia uma cópia para cada espectador. Com 3 pessoas assistindo em 1080p, são uns 6 a 8 Mbps de upload.
 - **Privacidade:** por ser direto, as pessoas da live podem ver o IP público umas das outras. Entre amigos, tudo bem.
 - **Servidor público do PeerJS:** é gratuito e não tem garantia. Se um dia ficar instável, dá para hospedar o seu (variáveis `PEER_*`).
+
+## Admin: encerrar qualquer live
+
+1. Na Vercel, cadastre a variável `ADMIN_PASSWORD` com uma senha longa, que só você sabe, e faça o Redeploy.
+2. Abra `https://SEU-SITE/admin`, digite a senha e cole o link de assistir (ou só o código de 8 letras, que aparece no rodapé da mensagem do bot: "Fita AbC23xYz").
+3. Clique em **Encerrar live**. O painel do apresentador e todos os espectadores veem que a live foi encerrada pelo administrador.
+
+Como funciona: o servidor confere a senha e devolve uma autorização assinada, válida só para aquela sala. A página de admin envia essa autorização ao painel do apresentador, que confere com o servidor antes de encerrar. A senha nunca sai do servidor.
+
+Limitação: como as salas não ficam guardadas em banco de dados, quem tem o link de apresentador consegue reabrir a sala recarregando o painel. Para bloquear de vez, seria preciso guardar uma lista de salas banidas (por exemplo, no Vercel KV).
 
 ## TURN: quando o espectador não consegue conectar
 

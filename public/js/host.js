@@ -14,6 +14,8 @@ const QUALIDADES = {
   texto: { largura: 1920, altura: 1080, fps: 15, dica: 'detail', bitrate: 2_500_000, descricao: '1080p, 15 fps · slides, código, documentos' },
   fluido: { largura: 1280, altura: 720, fps: 30, dica: 'motion', bitrate: 2_500_000, descricao: '720p, 30 fps · usa menos internet' },
   video: { largura: 1920, altura: 1080, fps: 30, dica: 'motion', bitrate: 4_500_000, descricao: '1080p, 30 fps · precisa de mais upload' },
+  jogo: { largura: 1280, altura: 720, fps: 60, dica: 'motion', bitrate: 4_500_000, descricao: '720p, 60 fps · jogos, ~5 Mbps de upload por pessoa' },
+  jogoHd: { largura: 1920, altura: 1080, fps: 60, dica: 'motion', bitrate: 7_000_000, descricao: '1080p, 60 fps · jogos, ~7 Mbps de upload por pessoa' },
 };
 
 const $ = (id) => document.getElementById(id);
@@ -39,7 +41,16 @@ const el = {
   osdEstado: $('osd-estado'),
   contador: $('contador'),
   led: $('led'),
+  avisoInatividade: $('aviso-inatividade'),
+  avisoSemSom: $('aviso-sem-som'),
+  entradaAudio: $('entrada-audio'),
 };
+
+// Economia: sem ninguém assistindo, a tela pausa sozinha e, depois de muito
+// tempo parada, a sala fecha (desconecta do servidor de sinalização).
+const PAUSAR_SEM_ESPECTADORES = 5 * 60_000; // 5 min compartilhando sem ninguém
+const FECHAR_SALA_PARADA = 30 * 60_000; // 30 min sem compartilhar e sem ninguém
+const AVISAR_FECHAMENTO_ANTES = 2 * 60_000;
 
 // Monitor "fora do ar" enquanto ninguém está apresentando.
 const estatica = criarEstatica($('estatica'));
@@ -170,7 +181,38 @@ setInterval(() => {
   }
 }, 5000);
 
+// Controle remoto do admin: a página /admin conecta aqui com papel "admin" e
+// manda um token. Só obedecemos depois que o servidor confirma o token.
+function aoConectarAdmin(conn) {
+  conn.on('data', async (mensagem) => {
+    if (mensagem?.tipo !== 'admin-encerrar') return;
+    let ok = false;
+    try {
+      const resposta = await fetch(
+        `/api/verificar?codigo=${codigo}&admin=${encodeURIComponent(String(mensagem.token ?? ''))}`,
+      );
+      ok = resposta.ok;
+    } catch {
+      ok = false;
+    }
+    if (!ok) {
+      conn.send({ tipo: 'admin-negado' });
+      return;
+    }
+    conn.send({ tipo: 'admin-ok' });
+    finalizar(
+      'Live encerrada pelo administrador',
+      'O administrador do LetsWatch encerrou esta transmissão.',
+      'admin',
+    );
+  });
+}
+
 function aoConectarEspectador(conn) {
+  if (conn.metadata?.papel === 'admin') {
+    aoConectarAdmin(conn);
+    return;
+  }
   conn.on('open', () => {
     if (encerrada) {
       conn.send({ tipo: 'encerrada' });
@@ -208,9 +250,17 @@ function conectarAudioDaTela(tela) {
 
 async function ligarMicrofone() {
   const a = prepararAudio();
+  const opcao = el.entradaAudio.selectedOptions[0];
+  const voz = !ENTRADA_DE_SOM_DO_PC.test(opcao?.textContent ?? '');
   try {
     a.mic = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      audio: {
+        ...(el.entradaAudio.value ? { deviceId: { exact: el.entradaAudio.value } } : {}),
+        // Voz: limpa ruído e eco. Som do PC (ex.: Mixagem estéreo): sem filtros.
+        echoCancellation: voz,
+        noiseSuppression: voz,
+        autoGainControl: voz,
+      },
     });
   } catch (erro) {
     console.warn(erro);
@@ -220,6 +270,8 @@ async function ligarMicrofone() {
   }
   a.fonteMic = a.contexto.createMediaStreamSource(a.mic);
   a.fonteMic.connect(a.destino);
+  atualizarAvisoSom();
+  listarEntradasDeAudio(); // com a permissão dada, os nomes das entradas aparecem
 }
 
 function desligarMicrofone() {
@@ -228,6 +280,7 @@ function desligarMicrofone() {
   audio.mic?.getTracks().forEach((t) => t.stop());
   audio.fonteMic = null;
   audio.mic = null;
+  atualizarAvisoSom();
 }
 
 // ---------- Compartilhamento de tela ----------
@@ -288,7 +341,10 @@ async function apresentar() {
   conectarAudioDaTela(tela);
   fluxo = new MediaStream([tela.getVideoTracks()[0], audio.destino.stream.getAudioTracks()[0]]);
   inicioNoAr = Date.now();
+  ociosoDesde = Date.now();
+  pausadoPorInatividade = false;
   mostrarPrevia(tela);
+  atualizarAvisoSom();
   atualizarStatus();
   enviarParaTodos(estadoAtual());
   for (const id of espectadores.keys()) ligarPara(id);
@@ -316,6 +372,7 @@ async function trocarTela() {
   }
   antiga?.getTracks().forEach((t) => t.stop());
   mostrarPrevia(nova);
+  atualizarAvisoSom();
 }
 
 function pararApresentacao() {
@@ -332,6 +389,7 @@ function pararApresentacao() {
     espectador.chamada = null;
   }
   mostrarPrevia(null);
+  atualizarAvisoSom();
   atualizarStatus();
   enviarParaTodos(estadoAtual());
 }
@@ -356,14 +414,93 @@ async function aplicarQualidade() {
 
 function encerrarLive() {
   if (!confirm('Encerrar a live para todo mundo?')) return;
+  finalizar('Fim da transmissão', 'Os espectadores já foram avisados. Rebobine antes de devolver!');
+}
+
+function finalizar(titulo, texto, motivo = '') {
   pararApresentacao();
   desligarMicrofone();
   encerrada = true;
-  enviarParaTodos({ tipo: 'encerrada' });
+  enviarParaTodos({ tipo: 'encerrada', motivo });
   // Dá um instante para a mensagem chegar antes de desconectar.
   setTimeout(() => peer?.destroy(), 500);
   estatica.desligar();
-  mostrarMensagem('Fim da transmissão', 'Os espectadores já foram avisados. Rebobine antes de devolver!');
+  mostrarMensagem(titulo, texto);
+}
+
+// ---------- Economia: pausa e fecha sozinho quando ninguém assiste ----------
+
+let ociosoDesde = Date.now();
+let pausadoPorInatividade = false;
+
+function mmss(ms) {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
+function avisoInatividade(texto) {
+  el.avisoInatividade.textContent = texto;
+  el.avisoInatividade.classList.toggle('escondido', !texto);
+}
+
+setInterval(() => {
+  if (encerrada || !peer) return;
+  if (espectadores.size > 0) {
+    ociosoDesde = Date.now();
+    pausadoPorInatividade = false;
+    avisoInatividade('');
+    return;
+  }
+
+  const parado = Date.now() - ociosoDesde;
+  if (fluxo) {
+    const resta = PAUSAR_SEM_ESPECTADORES - parado;
+    if (resta <= 0) {
+      pararApresentacao();
+      pausadoPorInatividade = true;
+      ociosoDesde = Date.now();
+    } else if (parado > 60_000) {
+      avisoInatividade(`Ninguém assistindo. A tela pausa sozinha em ${mmss(resta)}.`);
+      return;
+    }
+  }
+
+  if (!fluxo) {
+    const resta = FECHAR_SALA_PARADA - (Date.now() - ociosoDesde);
+    if (resta <= 0) {
+      finalizar(
+        'Sala fechada',
+        'Ninguém assistiu por 30 minutos, então a sala foi fechada para não gastar recursos. Recarregue esta página para reabrir.',
+      );
+    } else if (resta <= AVISAR_FECHAMENTO_ANTES) {
+      avisoInatividade(`Sala parada. Ela fecha sozinha em ${mmss(resta)}.`);
+    } else if (pausadoPorInatividade) {
+      avisoInatividade('A tela foi pausada porque ninguém estava assistindo. Aperte Apresentar tela para voltar.');
+    } else {
+      avisoInatividade('');
+    }
+  }
+}, 1000);
+
+// ---------- Aviso de "sem som" e escolha da entrada de áudio ----------
+
+function atualizarAvisoSom() {
+  const semSomDaTela = Boolean(telaAtual) && telaAtual.getAudioTracks().length === 0;
+  el.avisoSemSom.classList.toggle('escondido', !semSomDaTela || Boolean(audio?.mic));
+}
+
+// Entradas que capturam o som do computador (não é voz): sem filtros de voz.
+const ENTRADA_DE_SOM_DO_PC = /mix|est[eé]reo|stereo|cable|virtual|voicemeeter|loopback/i;
+
+async function listarEntradasDeAudio() {
+  if (!navigator.mediaDevices?.enumerateDevices) return;
+  const escolhida = el.entradaAudio.value;
+  const entradas = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
+  el.entradaAudio.replaceChildren(new Option('Padrão do sistema', ''));
+  entradas
+    .filter((d) => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications')
+    .forEach((d, i) => el.entradaAudio.add(new Option(d.label || `Entrada ${i + 1}`, d.deviceId)));
+  if ([...el.entradaAudio.options].some((o) => o.value === escolhida)) el.entradaAudio.value = escolhida;
 }
 
 // ---------- Conexão com o servidor de sinalização ----------
@@ -452,6 +589,14 @@ el.parar.addEventListener('click', pararApresentacao);
 el.encerrar.addEventListener('click', encerrarLive);
 el.qualidade.addEventListener('change', aplicarQualidade);
 el.copiarLink.addEventListener('click', () => copiarTexto(el.linkPublico.value, el.copiarLink));
+el.entradaAudio.addEventListener('change', async () => {
+  if (!el.microfone.checked) return;
+  desligarMicrofone();
+  await ligarMicrofone(); // troca a entrada sem precisar desligar a chave
+});
+navigator.mediaDevices?.addEventListener?.('devicechange', listarEntradasDeAudio);
+listarEntradasDeAudio();
+
 el.microfone.addEventListener('change', () => {
   if (el.microfone.checked) ligarMicrofone();
   else desligarMicrofone();
