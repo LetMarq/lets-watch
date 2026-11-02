@@ -132,6 +132,21 @@ No painel dá para **trocar de tela** sem derrubar ninguém, ligar o **microfone
 - **Privacidade:** por ser direto, as pessoas da live podem ver o IP público umas das outras. Entre amigos, tudo bem.
 - **Servidor público do PeerJS:** é gratuito e não tem garantia. Se um dia ficar instável, dá para hospedar o seu (variáveis `PEER_*`).
 
+## Som de jogos (ex.: League of Legends)
+
+Ao compartilhar só a **janela** de um jogo, o navegador não envia o som dela. Existem duas saídas:
+
+**Mais simples: compartilhar a tela inteira.** Na janela de escolha, escolha **Tela inteira** e marque **"Compartilhar áudio do sistema"** (Chrome ou Edge no Windows). Vai todo o som do PC, inclusive o de chamadas no Discord. Se você estiver numa chamada, os espectadores também ouvem as vozes.
+
+**Só o som do jogo: cabo de áudio virtual (VB-Cable, grátis).**
+
+1. Baixe o **VB-CABLE Driver** em https://vb-audio.com/Cable/, extraia o zip, clique com o botão direito em `VBCABLE_Setup_x64.exe` → **Executar como administrador** → **Install Driver**, e reinicie o PC.
+2. Abra o jogo. No Windows 11, vá em **Configurações → Sistema → Som → Mixer de volume** (no Windows 10: **Volume do aplicativo e preferências de dispositivo**). Em **League of Legends**, troque a **saída** para **CABLE Input**. O League tem dois programas, o cliente e o jogo, então troque nos dois.
+3. Para você continuar ouvindo o jogo: aperte `Win + R`, digite `mmsys.cpl` → aba **Gravação** → **CABLE Output** → **Propriedades** → aba **Escutar** → marque **"Escutar este dispositivo"** e escolha o seu fone ou caixa de som.
+4. No painel do LetsWatch, em **Entrada de som**, escolha **CABLE Output** e ligue a chave **Microfone / som extra**. Agora pode compartilhar só a janela do jogo: o som vai junto, sem as vozes do Discord.
+
+Por enquanto o painel usa uma entrada de som por vez. Com o CABLE Output escolhido, o seu microfone não vai junto.
+
 ## Admin: encerrar qualquer live
 
 1. Na Vercel, cadastre a variável `ADMIN_PASSWORD` com uma senha longa, que só você sabe, e faça o Redeploy.

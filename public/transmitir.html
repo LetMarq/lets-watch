@@ -78,20 +78,30 @@
 
         <div class="aviso-deck escondido" id="aviso-sem-som">
           <b>🔇 Transmitindo sem o som do computador.</b>
-          <br>• <b>Guia do navegador:</b> o som vai junto.
-          <br>• <b>Tela inteira:</b> só vai com <b>"Compartilhar áudio do sistema"</b> marcado na janela de escolha (Chrome ou Edge no Windows). Clique em <b>Trocar tela</b> e marque a opção.
-          <br>• <b>Janela de um programa ou jogo:</b> o navegador nunca envia o som. Compartilhe a <b>tela inteira</b> com o áudio do sistema, ou escolha <b>"Mixagem estéreo"</b> em <b>Entrada de som</b> e ligue a chave do microfone.
+          <br>• <b>Guia do navegador:</b> ligue "Compartilhar também o áudio da guia" na janela de escolha.
+          <br>• <b>Tela inteira:</b> marque "Compartilhar áudio do sistema" (Chrome ou Edge no Windows).
+          <br>• <b>Janela de um jogo ou programa:</b> no Chrome 141 ou mais novo, aparece uma opção de áudio ao escolher a janela; escolha acima se quer <b>só o som da janela</b> ou <b>todo o PC</b>. Em navegadores mais antigos, janelas vão sem som: use a tela inteira ou o VB-Cable (README).
+          <br>Clique em <b>Trocar tela</b> para escolher de novo.
         </div>
 
         <label class="alternar">
-          <span>Microfone<small>Para falar por cima da tela</small></span>
+          <span>Microfone / som extra<small>Liga a entrada escolhida abaixo</small></span>
           <span class="chave"><input type="checkbox" id="microfone"><span></span></span>
         </label>
 
         <div class="alternar">
-          <span>Entrada de som<small>Microfone ou outra fonte de áudio</small></span>
+          <span>Entrada de som<small>Microfone, ou o som de um jogo pelo cabo virtual (veja o README)</small></span>
           <select class="campo" id="entrada-audio" aria-label="Entrada de som">
             <option value="">Padrão do sistema</option>
+          </select>
+        </div>
+
+        <div class="alternar">
+          <span>Som ao compartilhar janela<small>Chrome 141+ (melhor no Windows 11). Vale na próxima escolha de tela.</small></span>
+          <select class="campo" id="som-janela" aria-label="Som ao compartilhar janela">
+            <option value="window">Só da janela</option>
+            <option value="system">Todo o PC</option>
+            <option value="exclude">Sem som</option>
           </select>
         </div>
 

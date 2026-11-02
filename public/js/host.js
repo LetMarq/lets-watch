@@ -44,6 +44,7 @@ const el = {
   avisoInatividade: $('aviso-inatividade'),
   avisoSemSom: $('aviso-sem-som'),
   entradaAudio: $('entrada-audio'),
+  somJanela: $('som-janela'),
 };
 
 // Economia: sem ninguém assistindo, a tela pausa sozinha e, depois de muito
@@ -226,9 +227,14 @@ function aoConectarEspectador(conn) {
   conn.on('error', () => removerEspectador(conn.peer));
 }
 
-// ---------- Áudio: mistura o som da tela com o microfone ----------
-// Sempre enviamos UMA faixa de áudio (mesmo que em silêncio). Assim dá para
-// ligar e desligar o microfone sem precisar refazer as conexões.
+// ---------- Áudio ----------
+// Sempre enviamos UMA faixa de áudio, e ela é trocada conforme o caso:
+// - sem microfone: o som da tela vai DIRETO, sem passar pelo mixador. Isso é
+//   o mais confiável quando o painel fica em segundo plano (ex.: compartilhando
+//   outra aba);
+// - com microfone: vai a mistura (tela + microfone) feita pelo mixador;
+// - sem som nenhum: silêncio, só para manter a faixa e poder ligar o som depois.
+// A troca usa replaceTrack, então ninguém precisa reconectar.
 
 function prepararAudio() {
   if (audio) return audio;
@@ -236,6 +242,26 @@ function prepararAudio() {
   const destino = contexto.createMediaStreamDestination();
   audio = { contexto, destino, fonteTela: null, fonteMic: null, mic: null };
   return audio;
+}
+
+function faixaDeAudio() {
+  const daTela = telaAtual?.getAudioTracks()[0];
+  if (audio?.mic) return audio.destino.stream.getAudioTracks()[0];
+  if (daTela) return daTela;
+  return prepararAudio().destino.stream.getAudioTracks()[0];
+}
+
+function atualizarFaixaDeAudio() {
+  if (!fluxo) return;
+  const nova = faixaDeAudio();
+  const atual = fluxo.getAudioTracks()[0];
+  if (atual === nova) return;
+  if (atual) fluxo.removeTrack(atual);
+  fluxo.addTrack(nova);
+  for (const { chamada } of espectadores.values()) {
+    const sender = chamada?.peerConnection?.getSenders().find((s) => s.track?.kind === 'audio');
+    sender?.replaceTrack(nova);
+  }
 }
 
 function conectarAudioDaTela(tela) {
@@ -270,6 +296,8 @@ async function ligarMicrofone() {
   }
   a.fonteMic = a.contexto.createMediaStreamSource(a.mic);
   a.fonteMic.connect(a.destino);
+  await a.contexto.resume();
+  atualizarFaixaDeAudio();
   atualizarAvisoSom();
   listarEntradasDeAudio(); // com a permissão dada, os nomes das entradas aparecem
 }
@@ -280,6 +308,7 @@ function desligarMicrofone() {
   audio.mic?.getTracks().forEach((t) => t.stop());
   audio.fonteMic = null;
   audio.mic = null;
+  atualizarFaixaDeAudio();
   atualizarAvisoSom();
 }
 
@@ -293,8 +322,16 @@ async function escolherTela() {
       height: { ideal: q.altura },
       frameRate: { ideal: q.fps, max: q.fps },
     },
-    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+    audio: {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      restrictOwnAudio: true, // Chrome 141+: tira do áudio o som desta própria página (evita eco)
+    },
     systemAudio: 'include', // oferece "som do sistema" ao compartilhar a tela inteira
+    // Chrome 141+: ao compartilhar uma JANELA, também oferece áudio.
+    // 'system' = todo o som do PC, 'window' = só o som da janela, 'exclude' = sem som.
+    windowAudio: el.somJanela.value,
     selfBrowserSurface: 'exclude', // esconde esta própria aba da lista
     surfaceSwitching: 'include', // permite trocar de guia pela barra do Chrome
   });
@@ -339,7 +376,7 @@ async function apresentar() {
 
   telaAtual = tela;
   conectarAudioDaTela(tela);
-  fluxo = new MediaStream([tela.getVideoTracks()[0], audio.destino.stream.getAudioTracks()[0]]);
+  fluxo = new MediaStream([tela.getVideoTracks()[0], faixaDeAudio()]);
   inicioNoAr = Date.now();
   ociosoDesde = Date.now();
   pausadoPorInatividade = false;
@@ -370,6 +407,7 @@ async function trocarTela() {
     const sender = chamada?.peerConnection?.getSenders().find((s) => s.track?.kind === 'video');
     sender?.replaceTrack(videoNovo);
   }
+  atualizarFaixaDeAudio(); // o som da tela nova (ou silêncio, se ela não tiver)
   antiga?.getTracks().forEach((t) => t.stop());
   mostrarPrevia(nova);
   atualizarAvisoSom();
@@ -595,6 +633,24 @@ el.entradaAudio.addEventListener('change', async () => {
   await ligarMicrofone(); // troca a entrada sem precisar desligar a chave
 });
 navigator.mediaDevices?.addEventListener?.('devicechange', listarEntradasDeAudio);
+
+// O navegador só mostra os nomes das entradas de som depois que a página
+// recebe permissão de áudio. Na primeira vez que a lista é aberta, pedimos
+// a permissão rapidinho para os nomes aparecerem (ex.: "CABLE Output").
+let permissaoPedida = false;
+async function liberarNomesDasEntradas() {
+  if (permissaoPedida || el.entradaAudio.options.length > 1) return;
+  permissaoPedida = true;
+  try {
+    const teste = await navigator.mediaDevices.getUserMedia({ audio: true });
+    teste.getTracks().forEach((t) => t.stop());
+  } catch {
+    // permissão negada: a lista fica só com "Padrão do sistema"
+  }
+  await listarEntradasDeAudio();
+}
+el.entradaAudio.addEventListener('pointerdown', liberarNomesDasEntradas);
+el.entradaAudio.addEventListener('focus', liberarNomesDasEntradas);
 listarEntradasDeAudio();
 
 el.microfone.addEventListener('change', () => {
