@@ -13,15 +13,48 @@ export function codigoDaUrl() {
   return encontrado ? encontrado[1] : null;
 }
 
-// Busca no backend quais servidores STUN/TURN e PeerJS usar.
+// ---------- TURN cadastrado neste navegador (página /turn) ----------
+// Cada pessoa pode cadastrar um TURN próprio (ex.: uma conta grátis dela na
+// ExpressTURN). Ele fica salvo só neste navegador (localStorage) e vai PRIMEIRO
+// na lista: o Chrome dá mais prioridade aos TURNs do começo da lista. Os do
+// site continuam na lista como reserva, caso o da pessoa pare de funcionar.
+
+const CHAVE_TURN = 'letswatch-turn';
+
+export function turnsDoNavegador() {
+  try {
+    const salvos = JSON.parse(localStorage.getItem(CHAVE_TURN) || '[]');
+    return Array.isArray(salvos) ? salvos : [];
+  } catch {
+    return [];
+  }
+}
+
+export function salvarTurnsDoNavegador(lista) {
+  try {
+    localStorage.setItem(CHAVE_TURN, JSON.stringify(lista));
+    return true;
+  } catch {
+    return false; // navegação anônima ou armazenamento bloqueado
+  }
+}
+
+// Busca no backend quais servidores STUN/TURN e PeerJS usar
+// e junta com o TURN cadastrado neste navegador, se houver.
 export async function carregarConfig() {
+  let config = { peer: null, iceServers: [{ urls: 'stun:stun.l.google.com:19302' }], temTurn: false };
   try {
     const resposta = await fetch('/api/config');
-    if (resposta.ok) return await resposta.json();
+    if (resposta.ok) config = await resposta.json();
   } catch {
     // sem backend (ex.: abrindo o HTML direto): usa o padrão
   }
-  return { peer: null, iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+  const meus = turnsDoNavegador();
+  if (meus.length) {
+    config.iceServers = [...meus, ...config.iceServers];
+    config.temTurn = true;
+  }
+  return config;
 }
 
 export function opcoesDoPeer(config) {

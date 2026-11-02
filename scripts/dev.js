@@ -87,6 +87,7 @@ http
       if (/^\/transmitir\/[^/]+$/.test(pathname)) return await servirArquivo(res, 'transmitir.html');
       if (pathname === '/') return await servirArquivo(res, 'index.html');
       if (pathname === '/admin') return await servirArquivo(res, 'admin.html');
+      if (pathname === '/turn') return await servirArquivo(res, 'turn.html');
       return await servirArquivo(res, decodeURIComponent(pathname));
     } catch (erro) {
       console.error(erro);

@@ -10,6 +10,10 @@
 // 3. Qualquer TURN com usuário e senha fixos (ex.: ExpressTURN): TURN_URL, TURN_USERNAME, TURN_CREDENTIAL
 // 4. Nada configurado: usa o servidor público e gratuito do Open Relay, sem cadastro.
 //    Para desligar, defina TURN_OPENRELAY=false.
+//
+// Contas extras (ex.: outras contas grátis da ExpressTURN): TURN_URL_2,
+// TURN_USERNAME_2, TURN_CREDENTIAL_2 ... até _5. O navegador tenta todas ao
+// mesmo tempo: se a cota de uma acabar, as outras continuam funcionando.
 import crypto from 'node:crypto';
 import { json } from '../lib/sala.js';
 
@@ -93,9 +97,19 @@ async function servidoresTurn(env) {
   return [];
 }
 
+function turnsExtras(env) {
+  const extras = [];
+  for (let i = 2; i <= 5; i++) {
+    const url = env[`TURN_URL_${i}`];
+    if (!url) continue;
+    extras.push({ urls: lista(url), username: env[`TURN_USERNAME_${i}`], credential: env[`TURN_CREDENTIAL_${i}`] });
+  }
+  return extras;
+}
+
 export async function GET() {
   const env = process.env;
-  const turn = await servidoresTurn(env);
+  const turn = [...(await servidoresTurn(env)), ...turnsExtras(env)];
 
   let peer = null;
   if (env.PEER_HOST) {

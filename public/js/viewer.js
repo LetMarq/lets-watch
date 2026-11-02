@@ -19,6 +19,7 @@ const el = {
   avisoCamada: $('aviso-camada'),
   avisoTitulo: $('aviso-titulo'),
   avisoTexto: $('aviso-texto'),
+  avisoLink: $('aviso-link'),
   estaticaCanvas: $('estatica'),
   estaticaBarra: $('estatica-barra'),
   titulo: $('titulo'),
@@ -54,6 +55,7 @@ function mostrarAviso(titulo, texto = '', tipo = 'estatica') {
   el.aviso.classList.remove('escondido');
   el.avisoTitulo.textContent = titulo;
   el.avisoTexto.textContent = texto;
+  el.avisoLink.classList.add('escondido');
 
   const azul = tipo === 'azul';
   el.avisoCamada.classList.toggle('tela-azul', azul);
@@ -102,10 +104,11 @@ function conectarAoApresentador() {
         mostrarAviso(
           'Sem conexão direta',
           temTurn
-            ? 'A rede bloqueou a conexão com o apresentador. Tentando de novo...'
-            : 'A rede bloqueou a conexão com o apresentador. Avise quem criou o site: falta configurar o servidor TURN (veja o README).',
+            ? 'A rede bloqueou a conexão com o apresentador. Tentando de novo... Se continuar, cadastre um TURN seu.'
+            : 'A rede bloqueou a conexão com o apresentador. Cadastre um TURN seu para resolver.',
           'azul',
         );
+        el.avisoLink.classList.remove('escondido');
       }
       agendarNovaTentativa();
     }

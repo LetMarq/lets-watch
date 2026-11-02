@@ -134,7 +134,9 @@ No painel dá para **trocar de tela** sem derrubar ninguém, ligar o **microfone
 
 ## Som de jogos (ex.: League of Legends)
 
-Ao compartilhar só a **janela** de um jogo, o navegador não envia o som dela. Existem duas saídas:
+**Chrome 141 ou mais novo (melhor no Windows 11):** ao escolher uma **janela**, o seletor passa a oferecer áudio. No painel, em **Som ao compartilhar janela**, escolha **Só da janela** (só o som do jogo, sem o Discord) ou **Todo o PC**, antes de clicar em Apresentar tela. Se a opção de áudio não aparecer no seletor com "Só da janela", troque para "Todo o PC" e tente de novo.
+
+Em navegadores mais antigos, ao compartilhar só a **janela** de um jogo, o navegador não envia o som dela. Nesse caso existem duas saídas:
 
 **Mais simples: compartilhar a tela inteira.** Na janela de escolha, escolha **Tela inteira** e marque **"Compartilhar áudio do sistema"** (Chrome ou Edge no Windows). Vai todo o som do PC, inclusive o de chamadas no Discord. Se você estiver numa chamada, os espectadores também ouvem as vozes.
 
@@ -160,6 +162,14 @@ Limitação: como as salas não ficam guardadas em banco de dados, quem tem o li
 ## TURN: quando o espectador não consegue conectar
 
 Se o painel mostra **0 pessoas assistindo** mesmo com alguém no link, ou o espectador vê **"Sem conexão direta"**, a rede de alguém bloqueou a conexão direta. Isso é comum em internet de operadora com IP compartilhado, 4G, empresa e faculdade. A solução é um servidor **TURN**, que repassa o vídeo só para quem não consegue conectar direto.
+
+### Cada pessoa pode usar o próprio TURN (página /turn)
+
+Em `https://SEU-SITE/turn`, qualquer pessoa cadastra um TURN dela, por exemplo uma conta grátis na [ExpressTURN](https://www.expressturn.com/). A página testa o servidor antes de salvar. Ele fica salvo **só naquele navegador** (localStorage) e entra **primeiro** na lista: o Chrome dá mais prioridade aos TURNs do começo da lista, e os do site ficam de reserva. Basta um dos lados da live ter um TURN funcionando, então normalmente só quem está no 4G/5G precisa cadastrar.
+
+### Várias contas no site
+
+Além de `TURN_URL`/`TURN_USERNAME`/`TURN_CREDENTIAL`, dá para cadastrar até mais 4 contas na Vercel: `TURN_URL_2`, `TURN_USERNAME_2`, `TURN_CREDENTIAL_2` e assim por diante, até `_5`. Todas são oferecidas ao mesmo tempo: se a cota de uma acabar, as outras continuam funcionando.
 
 ### Padrão: Open Relay (grátis, sem cadastro)
 
