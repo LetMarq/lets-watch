@@ -555,6 +555,43 @@ code { font-family: var(--font-osd); font-size: 1.25em; color: var(--yellow); }
 .icon-btn svg { width: 20px; height: 20px; }
 .icon-btn.active { background: linear-gradient(#ff6a5c, var(--red)); color: #1b0806; }
 
+/* Volume: mute button + fader slider + VT323 level readout */
+.volume { display: inline-flex; align-items: center; gap: 10px; flex: none; }
+.volume-slider {
+  --level: 0%;
+  -webkit-appearance: none; appearance: none; width: 110px; height: 24px; margin: 0;
+  background: transparent; cursor: pointer;
+}
+.volume-slider:focus-visible { outline: 2px solid var(--yellow); outline-offset: 4px; border-radius: 3px; }
+.volume-slider::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 3px; border: 1px solid #000;
+  background: linear-gradient(90deg, var(--cream) var(--level), rgba(255,255,255,.18) var(--level));
+}
+.volume-slider::-moz-range-track {
+  height: 6px; border-radius: 3px; border: 1px solid #000;
+  background: linear-gradient(90deg, var(--cream) var(--level), rgba(255,255,255,.18) var(--level));
+}
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 12px; height: 22px; margin-top: -9px;
+  border-radius: 2px; border: 1px solid #000;
+  background: linear-gradient(90deg, #8a7f74, #e9e1d6 45%, #8a7f74);
+  box-shadow: 0 2px 0 rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,.2);
+}
+.volume-slider::-moz-range-thumb {
+  width: 12px; height: 22px; border-radius: 2px; border: 1px solid #000;
+  background: linear-gradient(90deg, #8a7f74, #e9e1d6 45%, #8a7f74);
+  box-shadow: 0 2px 0 rgba(0,0,0,.6);
+}
+.volume-level { font-size: 20px; min-width: 2ch; color: var(--cream); }
+/* Phones use the hardware buttons (iPhone ignores page volume anyway) */
+@media (hover: none) and (pointer: coarse) {
+  .volume-slider, .volume-level { display: none; }
+}
+@media (max-width: 640px) {
+  .volume-slider { width: 80px; }
+  .volume-level { display: none; }
+}
+
 .stage-notice { position: absolute; inset: 0; z-index: 2; overflow: hidden; }
 .stage-notice .layer { z-index: 3; }
 .stage-notice .osd-large { font-size: clamp(36px, 7vw, 76px); }

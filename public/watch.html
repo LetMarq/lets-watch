@@ -49,10 +49,14 @@
     <div class="reactions-tray hidden" id="reactions-tray" role="group" aria-label="Enviar reação"></div>
 
     <footer class="stage-bottom">
-      <button class="icon-btn" id="sound-btn" type="button" title="Som (M)" aria-label="Ativar ou desativar som">
-        <svg id="icon-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m22 9-6 6M16 9l6 6"/></svg>
-        <svg id="icon-sound" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>
-      </button>
+      <div class="volume">
+        <button class="icon-btn" id="sound-btn" type="button" title="Som (M)" aria-label="Ativar ou desativar som">
+          <svg id="icon-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m22 9-6 6M16 9l6 6"/></svg>
+          <svg id="icon-sound" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>
+        </button>
+        <input class="volume-slider" id="volume" type="range" min="0" max="100" step="1" value="0" title="Volume (↑ ↓)" aria-label="Volume">
+        <span class="osd volume-level" id="volume-level" aria-hidden="true">00</span>
+      </div>
       <button class="icon-btn hidden" id="reactions-btn" type="button" title="Reações" aria-label="Enviar reação" aria-expanded="false">😀</button>
       <a class="brand brand-small" href="/" target="_blank">LetsWatch <span class="stripes" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></a>
       <span class="spacer"></span>

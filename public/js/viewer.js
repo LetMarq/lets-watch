@@ -12,6 +12,8 @@ const RETRY_INTERVAL_MS = 3000;
 const CONNECT_TIMEOUT_MS = 12000;
 // New key: people who visited back when CRT was on by default also start with it off.
 const CRT_STORAGE_KEY = 'letswatch-crt-v2';
+const VOLUME_STORAGE_KEY = 'letswatch-volume';
+const VOLUME_STEP = 0.1; // arrow keys: 10% per press
 
 const $ = (id) => document.getElementById(id);
 const el = {
@@ -32,6 +34,8 @@ const el = {
   soundBtn: $('sound-btn'),
   iconMuted: $('icon-muted'),
   iconSound: $('icon-sound'),
+  volume: $('volume'),
+  volumeLevel: $('volume-level'),
   crtBtn: $('crt-btn'),
   fillBtn: $('fill-btn'),
   pipBtn: $('pip-btn'),
@@ -226,17 +230,59 @@ async function play() {
   updateSound();
 }
 
+// The slider shows 0 while muted and goes back to the previous volume on
+// unmute (like YouTube). The chosen volume is remembered in this browser.
 function updateSound() {
-  const muted = el.video.muted;
+  const muted = el.video.muted || el.video.volume === 0;
+  const level = muted ? 0 : Math.round(el.video.volume * 100);
   el.iconMuted.classList.toggle('hidden', !muted);
   el.iconSound.classList.toggle('hidden', muted);
-  el.unmute.classList.toggle('hidden', !muted || !el.video.srcObject);
+  el.unmute.classList.toggle('hidden', !el.video.muted || !el.video.srcObject);
+  el.volume.value = String(level);
+  el.volume.style.setProperty('--level', `${level}%`);
+  el.volume.setAttribute('aria-valuetext', `${level}%`);
+  el.volumeLevel.textContent = String(level).padStart(2, '0');
+}
+
+function saveVolume(volume) {
+  try {
+    localStorage.setItem(VOLUME_STORAGE_KEY, String(volume));
+  } catch {
+    // private window or blocked storage: that's fine
+  }
+}
+
+function savedVolume() {
+  try {
+    const value = Number(localStorage.getItem(VOLUME_STORAGE_KEY));
+    return value > 0 && value <= 1 ? value : 1;
+  } catch {
+    return 1;
+  }
+}
+
+// Sets the volume (0 to 1). Any volume above 0 also unmutes; the user's
+// interaction counts as the browser's permission to play with sound.
+function setVolume(volume) {
+  const value = Math.min(1, Math.max(0, Math.round(volume * 100) / 100));
+  if (value === 0) {
+    el.video.muted = true;
+  } else {
+    el.video.volume = value;
+    el.video.muted = false;
+    el.video.play().catch(() => {});
+    saveVolume(value);
+  }
+  updateSound();
 }
 
 function toggleSound() {
-  el.video.muted = !el.video.muted;
-  el.video.play().catch(() => {});
-  updateSound();
+  if (el.video.muted || el.video.volume === 0) {
+    setVolume(el.video.volume || savedVolume());
+  } else {
+    el.video.muted = true;
+    updateSound();
+  }
 }
 
 function toggleFullscreen() {
@@ -353,6 +399,8 @@ function showControls() {
 
 async function init() {
   setCrt(savedCrt());
+  el.video.volume = savedVolume();
+  updateSound();
 
   if (!code) {
     showNotice('Erro de leitura', 'Link inválido. Confira se ele foi copiado inteiro.', 'blue');
@@ -389,6 +437,7 @@ async function init() {
 
 el.unmute.addEventListener('click', toggleSound);
 el.soundBtn.addEventListener('click', toggleSound);
+el.volume.addEventListener('input', () => setVolume(Number(el.volume.value) / 100));
 el.fullscreenBtn.addEventListener('click', toggleFullscreen);
 el.fillBtn.addEventListener('click', toggleFill);
 el.crtBtn.addEventListener('click', () => setCrt(!el.stage.classList.contains('crt')));
@@ -402,9 +451,16 @@ window.addEventListener('pagehide', () => peer?.destroy());
 
 document.addEventListener('pointermove', showControls);
 document.addEventListener('keydown', (event) => {
-  if (event.target.closest('input, textarea')) return;
+  // The slider handles its own arrow keys; text fields keep all keys.
+  if (event.target === el.volume && event.key.startsWith('Arrow')) return;
+  if (event.target.closest('input:not([type="range"]), textarea')) return;
   if (event.key === 'f' || event.key === 'F') toggleFullscreen();
   if (event.key === 'm' || event.key === 'M') toggleSound();
+  if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+    event.preventDefault();
+    const current = el.video.muted ? 0 : el.video.volume;
+    setVolume(current + (event.key === 'ArrowUp' ? VOLUME_STEP : -VOLUME_STEP));
+  }
   showControls();
 });
 
