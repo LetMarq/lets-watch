@@ -18,11 +18,16 @@ import {
 import { createStatic, formatTime } from './retro.js';
 
 // Labels are shown in the panel, so they stay in Portuguese.
+// degradation: what the browser gives up when the internet can't keep up.
+// - 'maintain-framerate': lowers the resolution but keeps the motion smooth
+//   (for videos and games: avoids the "slideshow" effect);
+// - 'maintain-resolution': keeps text sharp and drops frames (for slides and code).
 const QUALITY_PRESETS = {
-  text: { width: 1920, height: 1080, fps: 15, hint: 'detail', bitrate: 2_500_000, label: '1080p, 15 fps · slides, código, documentos' },
-  smooth: { width: 1280, height: 720, fps: 30, hint: 'motion', bitrate: 2_500_000, label: '720p, 30 fps · usa menos internet' },
-  movie: { width: 1920, height: 1080, fps: 30, hint: 'motion', bitrate: 4_500_000, label: '1080p, 30 fps · precisa de mais upload' },
+  smooth: { width: 1280, height: 720, fps: 30, hint: 'motion', degradation: 'maintain-framerate', bitrate: 2_500_000, label: '720p, 30 fps · vídeos e jogos, usa menos internet' },
+  movie: { width: 1920, height: 1080, fps: 30, hint: 'motion', degradation: 'maintain-framerate', bitrate: 4_500_000, label: '1080p, 30 fps · precisa de mais upload' },
+  text: { width: 1920, height: 1080, fps: 15, hint: 'detail', degradation: 'maintain-resolution', bitrate: 2_500_000, label: '1080p, 15 fps · slides, código, documentos (trava em vídeos)' },
 };
+const STATS_INTERVAL_MS = 2000;
 
 // Saving resources: with nobody watching, sharing pauses by itself and, after
 // a long idle time, the room closes (disconnects from the signaling server).
@@ -60,6 +65,7 @@ const el = {
   noAudioNotice: $('no-audio-notice'),
   reactionsEnabled: $('reactions-enabled'),
   reactionsLayer: $('reactions'),
+  sendStats: $('send-stats'),
 };
 
 // Monitor shows "no signal" static while nothing is being presented.
@@ -151,6 +157,7 @@ function removeViewer(id) {
   viewer.call?.close();
   viewers.delete(id);
   reactionHistory.delete(id);
+  lastBytes.delete(id);
   updateViewerCount();
 }
 
@@ -181,16 +188,23 @@ function applySendQuality(call) {
   const pc = call.peerConnection;
   if (!pc) return;
   const apply = async () => {
-    const { bitrate } = QUALITY_PRESETS[el.quality.value];
+    const { bitrate, degradation } = QUALITY_PRESETS[el.quality.value];
     for (const sender of pc.getSenders()) {
       if (sender.track?.kind !== 'video') continue;
       const parameters = sender.getParameters();
       if (!parameters.encodings?.length) continue;
       parameters.encodings[0].maxBitrate = bitrate;
+      parameters.degradationPreference = degradation;
       try {
         await sender.setParameters(parameters);
-      } catch (error) {
-        console.warn('Could not adjust the quality:', error);
+      } catch {
+        // Some browsers reject degradationPreference: apply at least the bitrate.
+        delete parameters.degradationPreference;
+        try {
+          await sender.setParameters(parameters);
+        } catch (error) {
+          console.warn('Could not adjust the quality:', error);
+        }
       }
     }
   };
@@ -216,6 +230,87 @@ setInterval(() => {
     if (!conn.open || state === 'failed' || state === 'closed') removeViewer(id);
   }
 }, 5000);
+
+// ---------- Send stats (shown under the viewer count) ----------
+// Every 2 s we ask the browser how the video is actually going out to each
+// viewer: resolution, fps, bitrate, whether the connection is direct or goes
+// through a TURN server, and what is holding the quality back (if anything).
+// This is what tells us WHY the picture is choppy.
+
+const lastBytes = new Map(); // peerId → { bytes, time }
+
+async function viewerStats(id, call) {
+  const pc = call?.peerConnection;
+  if (!pc || pc.connectionState !== 'connected') return null;
+  const report = await pc.getStats();
+  let video = null;
+  let pair = null;
+  report.forEach((stat) => {
+    if (stat.type === 'outbound-rtp' && stat.kind === 'video') video = stat;
+    if (stat.type === 'transport' && stat.selectedCandidatePairId) pair = report.get(stat.selectedCandidatePairId);
+  });
+  if (!pair) report.forEach((stat) => { if (stat.type === 'candidate-pair' && stat.nominated && stat.state === 'succeeded') pair = stat; });
+  if (!video) return null;
+
+  const now = Date.now();
+  const previous = lastBytes.get(id);
+  lastBytes.set(id, { bytes: video.bytesSent, time: now });
+  const mbps = previous ? ((video.bytesSent - previous.bytes) * 8) / ((now - previous.time) * 1000) : null;
+
+  const local = pair && report.get(pair.localCandidateId);
+  const remote = pair && report.get(pair.remoteCandidateId);
+  const relayed = local?.candidateType === 'relay' || remote?.candidateType === 'relay';
+
+  return {
+    height: video.frameHeight,
+    fps: Math.round(video.framesPerSecond ?? 0),
+    mbps,
+    relayed,
+    limit: video.qualityLimitationReason, // 'none', 'bandwidth', 'cpu' or 'other'
+    rtt: pair?.currentRoundTripTime,
+  };
+}
+
+const LIMIT_LABEL = {
+  bandwidth: 'limitado pela internet',
+  cpu: 'limitado pelo processador',
+  other: 'limitado',
+};
+
+async function updateSendStats() {
+  if (!outgoingStream || viewers.size === 0) {
+    el.sendStats.classList.add('hidden');
+    return;
+  }
+  const lines = [];
+  let index = 0;
+  for (const [id, { call }] of viewers) {
+    index++;
+    let stats = null;
+    try {
+      stats = await viewerStats(id, call);
+    } catch {
+      // stats not available yet
+    }
+    if (!stats) {
+      lines.push(`#${index} conectando...`);
+      continue;
+    }
+    const parts = [
+      stats.relayed ? 'via TURN' : 'direta',
+      stats.height ? `${stats.height}p` : '—',
+      `${stats.fps} fps`,
+    ];
+    if (stats.mbps != null) parts.push(`${stats.mbps.toFixed(1).replace('.', ',')} Mbps`);
+    if (stats.rtt != null) parts.push(`${Math.round(stats.rtt * 1000)} ms`);
+    if (LIMIT_LABEL[stats.limit]) parts.push(`⚠ ${LIMIT_LABEL[stats.limit]}`);
+    lines.push(`#${index} ${parts.join(' · ')}`);
+  }
+  el.sendStats.textContent = lines.join('\n');
+  el.sendStats.classList.remove('hidden');
+}
+
+setInterval(updateSendStats, STATS_INTERVAL_MS);
 
 // Admin remote control: the /admin page connects here with role "admin" and
 // sends a token. We only obey after the server confirms the token.

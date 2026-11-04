@@ -70,6 +70,8 @@
           <span class="display-label" id="viewer-count-label">pessoas assistindo</span>
         </div>
 
+        <p class="send-stats hidden" id="send-stats" title="Como o vídeo está saindo para cada pessoa"></p>
+
         <p class="deck-notice hidden" id="idle-notice"></p>
 
         <div class="keys hidden" id="live-controls">
@@ -92,9 +94,9 @@
         <div class="toggle-row">
           <span>Qualidade<small id="quality-hint"></small></span>
           <select class="field" id="quality" aria-label="Qualidade">
-            <option value="text">Texto</option>
-            <option value="smooth">Fluido</option>
+            <option value="smooth" selected>Fluido</option>
             <option value="movie">Filme</option>
+            <option value="text">Texto</option>
           </select>
         </div>
 

@@ -454,6 +454,12 @@ code { font-family: var(--font-osd); font-size: 1.25em; color: var(--yellow); }
 .switch input:checked + span::after { transform: translateX(22px); background: linear-gradient(#ff7a6e, var(--red)); }
 .switch input:focus-visible + span { outline: 2px solid var(--yellow); outline-offset: 2px; }
 .note { font-size: 11px; color: var(--muted); margin: 0; line-height: 1.5; }
+/* Live send stats per viewer (resolution, fps, bitrate, direct/TURN) */
+.send-stats {
+  margin: 0; padding: 8px 10px; white-space: pre-line;
+  font-family: var(--font-osd); font-size: 17px; line-height: 1.25; letter-spacing: .02em;
+  color: var(--vfd); background: #050807; border: 1px solid var(--line); border-radius: 6px;
+}
 .deck-notice {
   margin: 0; padding: 10px 12px; border-radius: 6px; font-size: 12px; line-height: 1.55;
   background: rgba(242, 193, 78, .08); border: 1px solid rgba(242, 193, 78, .35); color: #f3e3b8;
