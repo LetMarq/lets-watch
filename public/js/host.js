@@ -1,699 +1,705 @@
-// Painel do apresentador.
+// Presenter panel.
 //
-// Como funciona:
-// 1. Registra-se no PeerJS com o ID "letswatch-<codigo>".
-// 2. Cada espectador abre uma conexão de dados com esse ID (para receber
-//    título, contagem e avisos).
-// 3. Quando a tela está sendo compartilhada, o apresentador "liga" (peer.call)
-//    para cada espectador enviando o vídeo. O vídeo vai direto, de navegador
-//    para navegador.
-import { REACOES, carregarConfig, codigoDaUrl, copiarTexto, idDoApresentador, opcoesDoPeer, soltarEmoji } from './common.js';
-import { criarEstatica, formatarTempo } from './retro.js';
+// How it works:
+// 1. Registers on PeerJS with the id "letswatch-<code>".
+// 2. Each viewer opens a data connection to that id (to receive the title,
+//    viewer count and notices).
+// 3. While the screen is being shared, the presenter "calls" (peer.call) each
+//    viewer with the video. The video goes directly, browser to browser.
+import {
+  REACTIONS,
+  codeFromUrl,
+  copyText,
+  launchEmoji,
+  loadConfig,
+  peerOptions,
+  presenterPeerId,
+} from './common.js';
+import { createStatic, formatTime } from './retro.js';
 
-const QUALIDADES = {
-  texto: { largura: 1920, altura: 1080, fps: 15, dica: 'detail', bitrate: 2_500_000, descricao: '1080p, 15 fps · slides, código, documentos' },
-  fluido: { largura: 1280, altura: 720, fps: 30, dica: 'motion', bitrate: 2_500_000, descricao: '720p, 30 fps · usa menos internet' },
-  video: { largura: 1920, altura: 1080, fps: 30, dica: 'motion', bitrate: 4_500_000, descricao: '1080p, 30 fps · precisa de mais upload' },
-  jogo: { largura: 1280, altura: 720, fps: 60, dica: 'motion', bitrate: 4_500_000, descricao: '720p, 60 fps · jogos, ~5 Mbps de upload por pessoa' },
-  jogoHd: { largura: 1920, altura: 1080, fps: 60, dica: 'motion', bitrate: 7_000_000, descricao: '1080p, 60 fps · jogos, ~7 Mbps de upload por pessoa' },
+// Labels are shown in the panel, so they stay in Portuguese.
+const QUALITY_PRESETS = {
+  text: { width: 1920, height: 1080, fps: 15, hint: 'detail', bitrate: 2_500_000, label: '1080p, 15 fps · slides, código, documentos' },
+  smooth: { width: 1280, height: 720, fps: 30, hint: 'motion', bitrate: 2_500_000, label: '720p, 30 fps · usa menos internet' },
+  movie: { width: 1920, height: 1080, fps: 30, hint: 'motion', bitrate: 4_500_000, label: '1080p, 30 fps · precisa de mais upload' },
+  game: { width: 1280, height: 720, fps: 60, hint: 'motion', bitrate: 4_500_000, label: '720p, 60 fps · jogos, ~5 Mbps de upload por pessoa' },
+  gameHd: { width: 1920, height: 1080, fps: 60, hint: 'motion', bitrate: 7_000_000, label: '1080p, 60 fps · jogos, ~7 Mbps de upload por pessoa' },
 };
+
+// Saving resources: with nobody watching, sharing pauses by itself and, after
+// a long idle time, the room closes (disconnects from the signaling server).
+const PAUSE_WITHOUT_VIEWERS_MS = 5 * 60_000; // 5 min sharing to nobody
+const CLOSE_IDLE_ROOM_MS = 30 * 60_000; // 30 min not sharing and nobody watching
+const WARN_BEFORE_CLOSE_MS = 2 * 60_000;
+
+// Max reactions per viewer: 6 every 3 seconds.
+const REACTION_LIMIT = 6;
+const REACTION_WINDOW_MS = 3000;
+
+// Audio inputs that capture computer sound (not voice): no voice filters.
+const COMPUTER_AUDIO_INPUT = /mix|est[eé]reo|stereo|cable|virtual|voicemeeter|loopback/i;
 
 const $ = (id) => document.getElementById(id);
 const el = {
-  titulo: $('titulo'),
+  title: $('title'),
   status: $('status'),
-  previa: $('previa'),
-  previaVazia: $('previa-vazia'),
-  previaRotulo: $('previa-rotulo'),
-  apresentar: $('apresentar'),
-  controlesAoVivo: $('controles-ao-vivo'),
-  trocar: $('trocar'),
-  parar: $('parar'),
-  encerrar: $('encerrar'),
-  microfone: $('microfone'),
-  qualidade: $('qualidade'),
-  qualidadeDica: $('qualidade-dica'),
-  contagem: $('contagem'),
-  contagemRotulo: $('contagem-rotulo'),
-  linkPublico: $('link-publico'),
-  copiarLink: $('copiar-link'),
-  avisoSuporte: $('aviso-suporte'),
-  osdEstado: $('osd-estado'),
-  contador: $('contador'),
+  preview: $('preview'),
+  previewEmpty: $('preview-empty'),
+  previewLabel: $('preview-label'),
+  presentBtn: $('present-btn'),
+  liveControls: $('live-controls'),
+  switchScreen: $('switch-screen'),
+  stop: $('stop'),
+  endLive: $('end-live'),
+  mic: $('mic'),
+  quality: $('quality'),
+  qualityHint: $('quality-hint'),
+  viewerCount: $('viewer-count'),
+  viewerCountLabel: $('viewer-count-label'),
+  watchLink: $('watch-link'),
+  copyLink: $('copy-link'),
+  supportNotice: $('support-notice'),
+  osdState: $('osd-state'),
+  counter: $('counter'),
   led: $('led'),
-  avisoInatividade: $('aviso-inatividade'),
-  avisoSemSom: $('aviso-sem-som'),
-  entradaAudio: $('entrada-audio'),
-  somJanela: $('som-janela'),
-  reacoesAtivas: $('reacoes-ativas'),
-  camadaReacoes: $('reacoes'),
+  idleNotice: $('idle-notice'),
+  noAudioNotice: $('no-audio-notice'),
+  audioInput: $('audio-input'),
+  windowAudio: $('window-audio'),
+  reactionsEnabled: $('reactions-enabled'),
+  reactionsLayer: $('reactions'),
 };
 
-// Economia: sem ninguém assistindo, a tela pausa sozinha e, depois de muito
-// tempo parada, a sala fecha (desconecta do servidor de sinalização).
-const PAUSAR_SEM_ESPECTADORES = 5 * 60_000; // 5 min compartilhando sem ninguém
-const FECHAR_SALA_PARADA = 30 * 60_000; // 30 min sem compartilhar e sem ninguém
-const AVISAR_FECHAMENTO_ANTES = 2 * 60_000;
+// Monitor shows "no signal" static while nothing is being presented.
+const staticNoise = createStatic($('static'));
+staticNoise.start();
 
-// Monitor "fora do ar" enquanto ninguém está apresentando.
-const estatica = criarEstatica($('estatica'));
-estatica.ligar();
-
-// Contador de fita: quanto tempo a tela está no ar.
-let inicioNoAr = 0;
+// Tape counter: how long the screen has been on air.
+let onAirSince = 0;
 setInterval(() => {
-  el.contador.textContent = inicioNoAr ? formatarTempo(Date.now() - inicioNoAr) : '00:00:00';
+  el.counter.textContent = onAirSince ? formatTime(Date.now() - onAirSince) : '00:00:00';
 }, 500);
 
-const codigo = codigoDaUrl();
+const code = codeFromUrl();
 const params = new URLSearchParams(location.search);
-const chave = params.get('k');
+const key = params.get('k');
 
-/** @type {Map<string, {conn: any, chamada: any}>} */
-const espectadores = new Map();
+/** @type {Map<string, {conn: any, call: any}>} */
+const viewers = new Map();
 
 let peer = null;
-let telaAtual = null; // MediaStream vindo do getDisplayMedia
-let fluxo = null; // MediaStream enviado aos espectadores (vídeo da tela + áudio mixado)
-let audio = null; // { contexto, destino, fonteTela, fonteMic, mic }
-let encerrada = false;
+let currentScreen = null; // MediaStream from getDisplayMedia
+let outgoingStream = null; // MediaStream sent to viewers (screen video + audio)
+let audio = null; // { context, destination, screenSource, micSource, mic }
+let ended = false;
 
-// ---------- Telas de mensagem ----------
+// ---------- Message screens ----------
 
-function mostrarMensagem(titulo, texto = '', { carregando = false, acao = true } = {}) {
-  $('painel').classList.add('escondido');
-  $('mensagem').classList.remove('escondido');
-  $('mensagem-titulo').textContent = titulo;
-  $('mensagem-texto').textContent = texto;
-  $('mensagem-girando').classList.toggle('escondido', !carregando);
-  $('mensagem-acao').classList.toggle('escondido', !acao);
+function showMessage(title, text = '', { loading = false, action = true } = {}) {
+  $('panel').classList.add('hidden');
+  $('message').classList.remove('hidden');
+  $('message-title').textContent = title;
+  $('message-text').textContent = text;
+  $('message-loading').classList.toggle('hidden', !loading);
+  $('message-action').classList.toggle('hidden', !action);
 }
 
-function mostrarPainel() {
-  $('mensagem').classList.add('escondido');
-  $('painel').classList.remove('escondido');
+function showPanel() {
+  $('message').classList.add('hidden');
+  $('panel').classList.remove('hidden');
 }
 
-function definirStatus(texto, tipo = '') {
-  el.status.textContent = texto;
-  el.status.className = `status ${tipo ? `status-${tipo}` : ''}`;
+function setStatus(text, kind = '') {
+  el.status.textContent = text;
+  el.status.className = `status ${kind ? `status-${kind}` : ''}`;
 }
 
-function atualizarStatus() {
-  if (encerrada) return;
-  if (!peer || peer.disconnected) definirStatus('Reconectando', 'alerta');
-  else if (fluxo) definirStatus('● No ar', 'ao-vivo');
-  else definirStatus('Pronto', 'ok');
+function updateStatus() {
+  if (ended) return;
+  if (!peer || peer.disconnected) setStatus('Reconectando', 'warning');
+  else if (outgoingStream) setStatus('● No ar', 'live');
+  else setStatus('Pronto', 'ok');
 
-  // letreiro dentro do monitor
-  el.osdEstado.textContent = fluxo ? '● REC' : 'Standby';
-  el.osdEstado.classList.toggle('rec', Boolean(fluxo));
-  el.osdEstado.classList.toggle('piscar', Boolean(fluxo));
-  el.led.classList.toggle('aceso', Boolean(fluxo));
+  // OSD inside the monitor
+  const live = Boolean(outgoingStream);
+  el.osdState.textContent = live ? '● REC' : 'Standby';
+  el.osdState.classList.toggle('rec', live);
+  el.osdState.classList.toggle('blink', live);
+  el.led.classList.toggle('on', live);
 }
 
-// ---------- Comunicação com os espectadores ----------
+// ---------- Talking to viewers ----------
 
-function estadoAtual() {
+function currentState() {
   return {
-    tipo: 'estado',
-    titulo: el.titulo.value.trim(),
-    aoVivo: Boolean(fluxo),
-    espectadores: espectadores.size,
-    reacoes: el.reacoesAtivas.checked,
+    type: 'state',
+    title: el.title.value.trim(),
+    live: Boolean(outgoingStream),
+    viewers: viewers.size,
+    reactions: el.reactionsEnabled.checked,
   };
 }
 
-// ---------- Reações (emojis) ----------
-// O espectador manda o emoji para cá; se as reações estiverem ligadas,
-// repassamos para todos e mostramos no monitor. Cada pessoa pode mandar
-// no máximo 6 emojis a cada 3 segundos.
-const historicoReacoes = new Map(); // peerId → horários dos últimos emojis
+function broadcast(message) {
+  for (const { conn } of viewers.values()) {
+    if (conn.open) conn.send(message);
+  }
+}
 
-function podeReagir(id) {
-  const agora = Date.now();
-  const recentes = (historicoReacoes.get(id) ?? []).filter((t) => agora - t < 3000);
-  if (recentes.length >= 6) return false;
-  recentes.push(agora);
-  historicoReacoes.set(id, recentes);
+function updateViewerCount() {
+  const count = viewers.size;
+  el.viewerCount.textContent = String(count).padStart(2, '0');
+  el.viewerCountLabel.textContent = count === 1 ? 'pessoa assistindo' : 'pessoas assistindo';
+  broadcast(currentState());
+}
+
+function removeViewer(id) {
+  const viewer = viewers.get(id);
+  if (!viewer) return;
+  viewer.call?.close();
+  viewers.delete(id);
+  reactionHistory.delete(id);
+  updateViewerCount();
+}
+
+// ---------- Reactions (emojis) ----------
+// A viewer sends an emoji here; if reactions are enabled, we forward it to
+// everyone and show it on the monitor.
+const reactionHistory = new Map(); // peerId → timestamps of recent emojis
+
+function canReact(id) {
+  const now = Date.now();
+  const recent = (reactionHistory.get(id) ?? []).filter((time) => now - time < REACTION_WINDOW_MS);
+  if (recent.length >= REACTION_LIMIT) return false;
+  recent.push(now);
+  reactionHistory.set(id, recent);
   return true;
 }
 
-function tratarMensagemDoEspectador(conn, mensagem) {
-  if (mensagem?.tipo !== 'reacao') return;
-  if (!el.reacoesAtivas.checked || !REACOES.includes(mensagem.emoji) || !podeReagir(conn.peer)) return;
-  enviarParaTodos({ tipo: 'reacao', emoji: mensagem.emoji, de: conn.peer });
-  soltarEmoji(el.camadaReacoes, mensagem.emoji);
+function handleViewerMessage(conn, message) {
+  if (message?.type !== 'reaction') return;
+  if (!el.reactionsEnabled.checked || !REACTIONS.includes(message.emoji) || !canReact(conn.peer)) return;
+  broadcast({ type: 'reaction', emoji: message.emoji, from: conn.peer });
+  launchEmoji(el.reactionsLayer, message.emoji);
 }
 
-function enviarParaTodos(mensagem) {
-  for (const { conn } of espectadores.values()) {
-    if (conn.open) conn.send(mensagem);
-  }
-}
+// ---------- Calls ----------
 
-function atualizarContagem() {
-  const n = espectadores.size;
-  el.contagem.textContent = String(n).padStart(2, '0');
-  el.contagemRotulo.textContent = n === 1 ? 'pessoa assistindo' : 'pessoas assistindo';
-  enviarParaTodos(estadoAtual());
-}
-
-function removerEspectador(id) {
-  const espectador = espectadores.get(id);
-  if (!espectador) return;
-  espectador.chamada?.close();
-  espectadores.delete(id);
-  historicoReacoes.delete(id);
-  atualizarContagem();
-}
-
-function ajustarQualidadeDoEnvio(chamada) {
-  const pc = chamada.peerConnection;
+function applySendQuality(call) {
+  const pc = call.peerConnection;
   if (!pc) return;
-  const aplicar = async () => {
-    const { bitrate } = QUALIDADES[el.qualidade.value];
+  const apply = async () => {
+    const { bitrate } = QUALITY_PRESETS[el.quality.value];
     for (const sender of pc.getSenders()) {
       if (sender.track?.kind !== 'video') continue;
-      const parametros = sender.getParameters();
-      if (!parametros.encodings?.length) continue;
-      parametros.encodings[0].maxBitrate = bitrate;
+      const parameters = sender.getParameters();
+      if (!parameters.encodings?.length) continue;
+      parameters.encodings[0].maxBitrate = bitrate;
       try {
-        await sender.setParameters(parametros);
-      } catch (erro) {
-        console.warn('Não foi possível ajustar a qualidade:', erro);
+        await sender.setParameters(parameters);
+      } catch (error) {
+        console.warn('Could not adjust the quality:', error);
       }
     }
   };
-  if (pc.connectionState === 'connected') aplicar();
-  else pc.addEventListener('connectionstatechange', () => pc.connectionState === 'connected' && aplicar());
+  if (pc.connectionState === 'connected') apply();
+  else pc.addEventListener('connectionstatechange', () => pc.connectionState === 'connected' && apply());
 }
 
-function ligarPara(id) {
-  const espectador = espectadores.get(id);
-  if (!espectador || !fluxo) return;
-  espectador.chamada?.close();
-  const chamada = peer.call(id, fluxo);
-  espectador.chamada = chamada;
-  ajustarQualidadeDoEnvio(chamada);
-  chamada.on('error', (erro) => console.warn('Erro na chamada com', id, erro));
+function callViewer(id) {
+  const viewer = viewers.get(id);
+  if (!viewer || !outgoingStream) return;
+  viewer.call?.close();
+  const call = peer.call(id, outgoingStream);
+  viewer.call = call;
+  applySendQuality(call);
+  call.on('error', (error) => console.warn('Call error with', id, error));
 }
 
-// Se o espectador perder a internet ou o computador dormir, a conexão não
-// avisa que fechou. A cada poucos segundos, removemos as que caíram.
+// If a viewer loses internet or their computer sleeps, the connection doesn't
+// say it closed. Every few seconds we drop the ones that died.
 setInterval(() => {
-  for (const [id, { conn }] of espectadores) {
-    const estado = conn.peerConnection?.connectionState;
-    if (!conn.open || estado === 'failed' || estado === 'closed') removerEspectador(id);
+  for (const [id, { conn }] of viewers) {
+    const state = conn.peerConnection?.connectionState;
+    if (!conn.open || state === 'failed' || state === 'closed') removeViewer(id);
   }
 }, 5000);
 
-// Controle remoto do admin: a página /admin conecta aqui com papel "admin" e
-// manda um token. Só obedecemos depois que o servidor confirma o token.
-function aoConectarAdmin(conn) {
-  conn.on('data', async (mensagem) => {
-    if (mensagem?.tipo !== 'admin-encerrar') return;
+// Admin remote control: the /admin page connects here with role "admin" and
+// sends a token. We only obey after the server confirms the token.
+function handleAdminConnection(conn) {
+  conn.on('data', async (message) => {
+    if (message?.type !== 'admin-end') return;
     let ok = false;
     try {
-      const resposta = await fetch(
-        `/api/verificar?codigo=${codigo}&admin=${encodeURIComponent(String(mensagem.token ?? ''))}`,
+      const response = await fetch(
+        `/api/verify?code=${code}&admin=${encodeURIComponent(String(message.token ?? ''))}`,
       );
-      ok = resposta.ok;
+      ok = response.ok;
     } catch {
       ok = false;
     }
     if (!ok) {
-      conn.send({ tipo: 'admin-negado' });
+      conn.send({ type: 'admin-denied' });
       return;
     }
-    conn.send({ tipo: 'admin-ok' });
-    finalizar(
-      'Live encerrada pelo administrador',
-      'O administrador do LetsWatch encerrou esta transmissão.',
-      'admin',
-    );
+    conn.send({ type: 'admin-ok' });
+    endRoom('Live encerrada pelo administrador', 'O administrador do LetsWatch encerrou esta transmissão.', 'admin');
   });
 }
 
-function aoConectarEspectador(conn) {
-  if (conn.metadata?.papel === 'admin') {
-    aoConectarAdmin(conn);
+function handleConnection(conn) {
+  if (conn.metadata?.role === 'admin') {
+    handleAdminConnection(conn);
     return;
   }
   conn.on('open', () => {
-    if (encerrada) {
-      conn.send({ tipo: 'encerrada' });
+    if (ended) {
+      conn.send({ type: 'ended' });
       return;
     }
-    espectadores.set(conn.peer, { conn, chamada: null });
-    atualizarContagem();
-    if (fluxo) ligarPara(conn.peer);
+    viewers.set(conn.peer, { conn, call: null });
+    updateViewerCount();
+    if (outgoingStream) callViewer(conn.peer);
   });
-  conn.on('data', (mensagem) => tratarMensagemDoEspectador(conn, mensagem));
-  conn.on('close', () => removerEspectador(conn.peer));
-  conn.on('error', () => removerEspectador(conn.peer));
+  conn.on('data', (message) => handleViewerMessage(conn, message));
+  conn.on('close', () => removeViewer(conn.peer));
+  conn.on('error', () => removeViewer(conn.peer));
 }
 
-// ---------- Áudio ----------
-// Sempre enviamos UMA faixa de áudio, e ela é trocada conforme o caso:
-// - sem microfone: o som da tela vai DIRETO, sem passar pelo mixador. Isso é
-//   o mais confiável quando o painel fica em segundo plano (ex.: compartilhando
-//   outra aba);
-// - com microfone: vai a mistura (tela + microfone) feita pelo mixador;
-// - sem som nenhum: silêncio, só para manter a faixa e poder ligar o som depois.
-// A troca usa replaceTrack, então ninguém precisa reconectar.
+// ---------- Audio ----------
+// We always send ONE audio track, swapped depending on the situation:
+// - mic off: the screen audio goes DIRECTLY, without the mixer. This is the
+//   most reliable option when the panel is in the background (e.g. while
+//   sharing another tab);
+// - mic on: the mix (screen + mic) made by the mixer;
+// - no audio at all: silence, just to keep the track so sound can be turned on later.
+// Swapping uses replaceTrack, so nobody needs to reconnect.
 
-function prepararAudio() {
+function setupAudio() {
   if (audio) return audio;
-  const contexto = new AudioContext();
-  const destino = contexto.createMediaStreamDestination();
-  audio = { contexto, destino, fonteTela: null, fonteMic: null, mic: null };
+  const context = new AudioContext();
+  const destination = context.createMediaStreamDestination();
+  audio = { context, destination, screenSource: null, micSource: null, mic: null };
   return audio;
 }
 
-function faixaDeAudio() {
-  const daTela = telaAtual?.getAudioTracks()[0];
-  if (audio?.mic) return audio.destino.stream.getAudioTracks()[0];
-  if (daTela) return daTela;
-  return prepararAudio().destino.stream.getAudioTracks()[0];
+function outgoingAudioTrack() {
+  const screenTrack = currentScreen?.getAudioTracks()[0];
+  if (audio?.mic) return audio.destination.stream.getAudioTracks()[0];
+  if (screenTrack) return screenTrack;
+  return setupAudio().destination.stream.getAudioTracks()[0];
 }
 
-function atualizarFaixaDeAudio() {
-  if (!fluxo) return;
-  const nova = faixaDeAudio();
-  const atual = fluxo.getAudioTracks()[0];
-  if (atual === nova) return;
-  if (atual) fluxo.removeTrack(atual);
-  fluxo.addTrack(nova);
-  for (const { chamada } of espectadores.values()) {
-    const sender = chamada?.peerConnection?.getSenders().find((s) => s.track?.kind === 'audio');
-    sender?.replaceTrack(nova);
+function updateOutgoingAudio() {
+  if (!outgoingStream) return;
+  const next = outgoingAudioTrack();
+  const current = outgoingStream.getAudioTracks()[0];
+  if (current === next) return;
+  if (current) outgoingStream.removeTrack(current);
+  outgoingStream.addTrack(next);
+  for (const { call } of viewers.values()) {
+    const sender = call?.peerConnection?.getSenders().find((s) => s.track?.kind === 'audio');
+    sender?.replaceTrack(next);
   }
 }
 
-function conectarAudioDaTela(tela) {
-  const a = prepararAudio();
-  a.fonteTela?.disconnect();
-  a.fonteTela = null;
-  if (tela.getAudioTracks().length) {
-    a.fonteTela = a.contexto.createMediaStreamSource(new MediaStream(tela.getAudioTracks()));
-    a.fonteTela.connect(a.destino);
+function connectScreenAudio(screen) {
+  const a = setupAudio();
+  a.screenSource?.disconnect();
+  a.screenSource = null;
+  if (screen.getAudioTracks().length) {
+    a.screenSource = a.context.createMediaStreamSource(new MediaStream(screen.getAudioTracks()));
+    a.screenSource.connect(a.destination);
   }
 }
 
-async function ligarMicrofone() {
-  const a = prepararAudio();
-  const opcao = el.entradaAudio.selectedOptions[0];
-  const voz = !ENTRADA_DE_SOM_DO_PC.test(opcao?.textContent ?? '');
+async function startMic() {
+  const a = setupAudio();
+  const option = el.audioInput.selectedOptions[0];
+  const isVoice = !COMPUTER_AUDIO_INPUT.test(option?.textContent ?? '');
   try {
     a.mic = await navigator.mediaDevices.getUserMedia({
       audio: {
-        ...(el.entradaAudio.value ? { deviceId: { exact: el.entradaAudio.value } } : {}),
-        // Voz: limpa ruído e eco. Som do PC (ex.: Mixagem estéreo): sem filtros.
-        echoCancellation: voz,
-        noiseSuppression: voz,
-        autoGainControl: voz,
+        ...(el.audioInput.value ? { deviceId: { exact: el.audioInput.value } } : {}),
+        // Voice: clean up noise and echo. Computer sound (e.g. Stereo Mix): no filters.
+        echoCancellation: isVoice,
+        noiseSuppression: isVoice,
+        autoGainControl: isVoice,
       },
     });
-  } catch (erro) {
-    console.warn(erro);
-    el.microfone.checked = false;
+  } catch (error) {
+    console.warn(error);
+    el.mic.checked = false;
     alert('Não foi possível usar o microfone. Verifique a permissão do navegador.');
     return;
   }
-  a.fonteMic = a.contexto.createMediaStreamSource(a.mic);
-  a.fonteMic.connect(a.destino);
-  await a.contexto.resume();
-  atualizarFaixaDeAudio();
-  atualizarAvisoSom();
-  listarEntradasDeAudio(); // com a permissão dada, os nomes das entradas aparecem
+  a.micSource = a.context.createMediaStreamSource(a.mic);
+  a.micSource.connect(a.destination);
+  await a.context.resume();
+  updateOutgoingAudio();
+  updateNoAudioNotice();
+  listAudioInputs(); // with permission granted, input names become visible
 }
 
-function desligarMicrofone() {
+function stopMic() {
   if (!audio) return;
-  audio.fonteMic?.disconnect();
-  audio.mic?.getTracks().forEach((t) => t.stop());
-  audio.fonteMic = null;
+  audio.micSource?.disconnect();
+  audio.mic?.getTracks().forEach((track) => track.stop());
+  audio.micSource = null;
   audio.mic = null;
-  atualizarFaixaDeAudio();
-  atualizarAvisoSom();
+  updateOutgoingAudio();
+  updateNoAudioNotice();
 }
 
-// ---------- Compartilhamento de tela ----------
+// ---------- Screen sharing ----------
 
-async function escolherTela() {
-  const q = QUALIDADES[el.qualidade.value];
-  const tela = await navigator.mediaDevices.getDisplayMedia({
+async function pickScreen() {
+  const preset = QUALITY_PRESETS[el.quality.value];
+  const screen = await navigator.mediaDevices.getDisplayMedia({
     video: {
-      width: { ideal: q.largura },
-      height: { ideal: q.altura },
-      frameRate: { ideal: q.fps, max: q.fps },
+      width: { ideal: preset.width },
+      height: { ideal: preset.height },
+      frameRate: { ideal: preset.fps, max: preset.fps },
     },
     audio: {
       echoCancellation: false,
       noiseSuppression: false,
       autoGainControl: false,
-      restrictOwnAudio: true, // Chrome 141+: tira do áudio o som desta própria página (evita eco)
+      restrictOwnAudio: true, // Chrome 141+: removes this page's own sound from the capture (avoids echo)
     },
-    systemAudio: 'include', // oferece "som do sistema" ao compartilhar a tela inteira
-    // Chrome 141+: ao compartilhar uma JANELA, também oferece áudio.
-    // 'system' = todo o som do PC, 'window' = só o som da janela, 'exclude' = sem som.
-    windowAudio: el.somJanela.value,
-    selfBrowserSurface: 'exclude', // esconde esta própria aba da lista
-    surfaceSwitching: 'include', // permite trocar de guia pela barra do Chrome
+    systemAudio: 'include', // offers "system audio" when sharing the entire screen
+    // Chrome 141+: also offers audio when sharing a WINDOW.
+    // 'system' = all computer sound, 'window' = that window only, 'exclude' = no audio.
+    windowAudio: el.windowAudio.value,
+    selfBrowserSurface: 'exclude', // hides this very tab from the list
+    surfaceSwitching: 'include', // allows switching tabs from Chrome's sharing bar
   });
-  const video = tela.getVideoTracks()[0];
-  video.contentHint = q.dica;
-  // Clicar em "Parar compartilhamento" na barra do navegador:
+  const video = screen.getVideoTracks()[0];
+  video.contentHint = preset.hint;
+  // Clicking "Stop sharing" in the browser bar:
   video.addEventListener('ended', () => {
-    if (telaAtual === tela) pararApresentacao();
+    if (currentScreen === screen) stopPresenting();
   });
-  return tela;
+  return screen;
 }
 
-function mostrarPrevia(tela) {
-  el.previa.srcObject = tela ? new MediaStream(tela.getVideoTracks()) : null;
-  el.previaVazia.classList.toggle('escondido', Boolean(tela));
-  el.previaRotulo.classList.toggle('escondido', !tela);
-  el.controlesAoVivo.classList.toggle('escondido', !tela);
-  if (tela) {
-    estatica.desligar();
-    el.previa.classList.remove('ligando');
-    void el.previa.offsetWidth; // reinicia a animação de "ligar a TV"
-    el.previa.classList.add('ligando');
+function showPreview(screen) {
+  el.preview.srcObject = screen ? new MediaStream(screen.getVideoTracks()) : null;
+  el.previewEmpty.classList.toggle('hidden', Boolean(screen));
+  el.previewLabel.classList.toggle('hidden', !screen);
+  el.liveControls.classList.toggle('hidden', !screen);
+  if (screen) {
+    staticNoise.stop();
+    el.preview.classList.remove('power-on');
+    void el.preview.offsetWidth; // restarts the "TV power-on" animation
+    el.preview.classList.add('power-on');
   } else {
-    estatica.ligar();
+    staticNoise.start();
   }
 }
 
-async function apresentar() {
-  prepararAudio();
-  await audio.contexto.resume();
+async function startPresenting() {
+  setupAudio();
+  await audio.context.resume();
 
-  let tela;
+  let screen;
   try {
-    tela = await escolherTela();
-  } catch (erro) {
-    if (erro.name !== 'NotAllowedError') {
-      console.error(erro);
+    screen = await pickScreen();
+  } catch (error) {
+    if (error.name !== 'NotAllowedError') {
+      console.error(error);
       alert('Não foi possível compartilhar a tela neste navegador.');
     }
-    return; // NotAllowedError = a pessoa clicou em Cancelar
+    return; // NotAllowedError = the person clicked Cancel
   }
 
-  telaAtual = tela;
-  conectarAudioDaTela(tela);
-  fluxo = new MediaStream([tela.getVideoTracks()[0], faixaDeAudio()]);
-  inicioNoAr = Date.now();
-  ociosoDesde = Date.now();
-  pausadoPorInatividade = false;
-  mostrarPrevia(tela);
-  atualizarAvisoSom();
-  atualizarStatus();
-  enviarParaTodos(estadoAtual());
-  for (const id of espectadores.keys()) ligarPara(id);
+  currentScreen = screen;
+  connectScreenAudio(screen);
+  outgoingStream = new MediaStream([screen.getVideoTracks()[0], outgoingAudioTrack()]);
+  onAirSince = Date.now();
+  idleSince = Date.now();
+  pausedForIdle = false;
+  showPreview(screen);
+  updateNoAudioNotice();
+  updateStatus();
+  broadcast(currentState());
+  for (const id of viewers.keys()) callViewer(id);
 }
 
-// Troca a tela/janela sem derrubar ninguém: substitui só a faixa de vídeo.
-async function trocarTela() {
-  let nova;
+// Switches screen/window without dropping anyone: only the video track is replaced.
+async function switchScreen() {
+  let next;
   try {
-    nova = await escolherTela();
+    next = await pickScreen();
   } catch {
     return;
   }
-  const antiga = telaAtual;
-  const videoNovo = nova.getVideoTracks()[0];
+  const previous = currentScreen;
+  const newVideo = next.getVideoTracks()[0];
 
-  telaAtual = nova;
-  conectarAudioDaTela(nova);
-  fluxo.getVideoTracks().forEach((t) => fluxo.removeTrack(t));
-  fluxo.addTrack(videoNovo);
+  currentScreen = next;
+  connectScreenAudio(next);
+  outgoingStream.getVideoTracks().forEach((track) => outgoingStream.removeTrack(track));
+  outgoingStream.addTrack(newVideo);
 
-  for (const { chamada } of espectadores.values()) {
-    const sender = chamada?.peerConnection?.getSenders().find((s) => s.track?.kind === 'video');
-    sender?.replaceTrack(videoNovo);
+  for (const { call } of viewers.values()) {
+    const sender = call?.peerConnection?.getSenders().find((s) => s.track?.kind === 'video');
+    sender?.replaceTrack(newVideo);
   }
-  atualizarFaixaDeAudio(); // o som da tela nova (ou silêncio, se ela não tiver)
-  antiga?.getTracks().forEach((t) => t.stop());
-  mostrarPrevia(nova);
-  atualizarAvisoSom();
+  updateOutgoingAudio(); // the new screen's audio (or silence if it has none)
+  previous?.getTracks().forEach((track) => track.stop());
+  showPreview(next);
+  updateNoAudioNotice();
 }
 
-function pararApresentacao() {
-  telaAtual?.getTracks().forEach((t) => t.stop());
-  telaAtual = null;
-  fluxo = null;
-  inicioNoAr = 0;
+function stopPresenting() {
+  currentScreen?.getTracks().forEach((track) => track.stop());
+  currentScreen = null;
+  outgoingStream = null;
+  onAirSince = 0;
   if (audio) {
-    audio.fonteTela?.disconnect();
-    audio.fonteTela = null;
+    audio.screenSource?.disconnect();
+    audio.screenSource = null;
   }
-  for (const espectador of espectadores.values()) {
-    espectador.chamada?.close();
-    espectador.chamada = null;
+  for (const viewer of viewers.values()) {
+    viewer.call?.close();
+    viewer.call = null;
   }
-  mostrarPrevia(null);
-  atualizarAvisoSom();
-  atualizarStatus();
-  enviarParaTodos(estadoAtual());
+  showPreview(null);
+  updateNoAudioNotice();
+  updateStatus();
+  broadcast(currentState());
 }
 
-async function aplicarQualidade() {
-  const q = QUALIDADES[el.qualidade.value];
-  el.qualidadeDica.textContent = q.descricao;
-  if (!telaAtual) return;
-  const video = telaAtual.getVideoTracks()[0];
-  video.contentHint = q.dica;
+async function applyQuality() {
+  const preset = QUALITY_PRESETS[el.quality.value];
+  el.qualityHint.textContent = preset.label;
+  if (!currentScreen) return;
+  const video = currentScreen.getVideoTracks()[0];
+  video.contentHint = preset.hint;
   try {
     await video.applyConstraints({
-      width: { ideal: q.largura },
-      height: { ideal: q.altura },
-      frameRate: { ideal: q.fps, max: q.fps },
+      width: { ideal: preset.width },
+      height: { ideal: preset.height },
+      frameRate: { ideal: preset.fps, max: preset.fps },
     });
-  } catch (erro) {
-    console.warn(erro);
+  } catch (error) {
+    console.warn(error);
   }
-  for (const { chamada } of espectadores.values()) if (chamada) ajustarQualidadeDoEnvio(chamada);
+  for (const { call } of viewers.values()) if (call) applySendQuality(call);
 }
 
-function encerrarLive() {
+function confirmEndLive() {
   if (!confirm('Encerrar a live para todo mundo?')) return;
-  finalizar('Fim da transmissão', 'Os espectadores já foram avisados. Rebobine antes de devolver!');
+  endRoom('Fim da transmissão', 'Os espectadores já foram avisados. Rebobine antes de devolver!');
 }
 
-function finalizar(titulo, texto, motivo = '') {
-  pararApresentacao();
-  desligarMicrofone();
-  encerrada = true;
-  enviarParaTodos({ tipo: 'encerrada', motivo });
-  // Dá um instante para a mensagem chegar antes de desconectar.
+function endRoom(title, text, reason = '') {
+  stopPresenting();
+  stopMic();
+  ended = true;
+  broadcast({ type: 'ended', reason });
+  // Give the message a moment to arrive before disconnecting.
   setTimeout(() => peer?.destroy(), 500);
-  estatica.desligar();
-  mostrarMensagem(titulo, texto);
+  staticNoise.stop();
+  showMessage(title, text);
 }
 
-// ---------- Economia: pausa e fecha sozinho quando ninguém assiste ----------
+// ---------- Saving resources: pause and close when nobody is watching ----------
 
-let ociosoDesde = Date.now();
-let pausadoPorInatividade = false;
+let idleSince = Date.now();
+let pausedForIdle = false;
 
-function mmss(ms) {
+function minutesSeconds(ms) {
   const total = Math.max(0, Math.ceil(ms / 1000));
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
-function avisoInatividade(texto) {
-  el.avisoInatividade.textContent = texto;
-  el.avisoInatividade.classList.toggle('escondido', !texto);
+function setIdleNotice(text) {
+  el.idleNotice.textContent = text;
+  el.idleNotice.classList.toggle('hidden', !text);
 }
 
 setInterval(() => {
-  if (encerrada || !peer) return;
-  if (espectadores.size > 0) {
-    ociosoDesde = Date.now();
-    pausadoPorInatividade = false;
-    avisoInatividade('');
+  if (ended || !peer) return;
+  if (viewers.size > 0) {
+    idleSince = Date.now();
+    pausedForIdle = false;
+    setIdleNotice('');
     return;
   }
 
-  const parado = Date.now() - ociosoDesde;
-  if (fluxo) {
-    const resta = PAUSAR_SEM_ESPECTADORES - parado;
-    if (resta <= 0) {
-      pararApresentacao();
-      pausadoPorInatividade = true;
-      ociosoDesde = Date.now();
-    } else if (parado > 60_000) {
-      avisoInatividade(`Ninguém assistindo. A tela pausa sozinha em ${mmss(resta)}.`);
+  const idleFor = Date.now() - idleSince;
+  if (outgoingStream) {
+    const remaining = PAUSE_WITHOUT_VIEWERS_MS - idleFor;
+    if (remaining <= 0) {
+      stopPresenting();
+      pausedForIdle = true;
+      idleSince = Date.now();
+    } else if (idleFor > 60_000) {
+      setIdleNotice(`Ninguém assistindo. A tela pausa sozinha em ${minutesSeconds(remaining)}.`);
       return;
     }
   }
 
-  if (!fluxo) {
-    const resta = FECHAR_SALA_PARADA - (Date.now() - ociosoDesde);
-    if (resta <= 0) {
-      finalizar(
+  if (!outgoingStream) {
+    const remaining = CLOSE_IDLE_ROOM_MS - (Date.now() - idleSince);
+    if (remaining <= 0) {
+      endRoom(
         'Sala fechada',
         'Ninguém assistiu por 30 minutos, então a sala foi fechada para não gastar recursos. Recarregue esta página para reabrir.',
       );
-    } else if (resta <= AVISAR_FECHAMENTO_ANTES) {
-      avisoInatividade(`Sala parada. Ela fecha sozinha em ${mmss(resta)}.`);
-    } else if (pausadoPorInatividade) {
-      avisoInatividade('A tela foi pausada porque ninguém estava assistindo. Aperte Apresentar tela para voltar.');
+    } else if (remaining <= WARN_BEFORE_CLOSE_MS) {
+      setIdleNotice(`Sala parada. Ela fecha sozinha em ${minutesSeconds(remaining)}.`);
+    } else if (pausedForIdle) {
+      setIdleNotice('A tela foi pausada porque ninguém estava assistindo. Aperte Apresentar tela para voltar.');
     } else {
-      avisoInatividade('');
+      setIdleNotice('');
     }
   }
 }, 1000);
 
-// ---------- Aviso de "sem som" e escolha da entrada de áudio ----------
+// ---------- "No audio" notice and audio input picker ----------
 
-function atualizarAvisoSom() {
-  const semSomDaTela = Boolean(telaAtual) && telaAtual.getAudioTracks().length === 0;
-  el.avisoSemSom.classList.toggle('escondido', !semSomDaTela || Boolean(audio?.mic));
+function updateNoAudioNotice() {
+  const screenHasNoAudio = Boolean(currentScreen) && currentScreen.getAudioTracks().length === 0;
+  el.noAudioNotice.classList.toggle('hidden', !screenHasNoAudio || Boolean(audio?.mic));
 }
 
-// Entradas que capturam o som do computador (não é voz): sem filtros de voz.
-const ENTRADA_DE_SOM_DO_PC = /mix|est[eé]reo|stereo|cable|virtual|voicemeeter|loopback/i;
-
-async function listarEntradasDeAudio() {
+async function listAudioInputs() {
   if (!navigator.mediaDevices?.enumerateDevices) return;
-  const escolhida = el.entradaAudio.value;
-  const entradas = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
-  el.entradaAudio.replaceChildren(new Option('Padrão do sistema', ''));
-  entradas
+  const selected = el.audioInput.value;
+  const inputs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
+  el.audioInput.replaceChildren(new Option('Padrão do sistema', ''));
+  inputs
     .filter((d) => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications')
-    .forEach((d, i) => el.entradaAudio.add(new Option(d.label || `Entrada ${i + 1}`, d.deviceId)));
-  if ([...el.entradaAudio.options].some((o) => o.value === escolhida)) el.entradaAudio.value = escolhida;
+    .forEach((d, i) => el.audioInput.add(new Option(d.label || `Entrada ${i + 1}`, d.deviceId)));
+  if ([...el.audioInput.options].some((o) => o.value === selected)) el.audioInput.value = selected;
 }
 
-// ---------- Conexão com o servidor de sinalização ----------
+// The browser only shows audio input names after the page gets audio
+// permission. The first time the list is opened, we briefly ask for it so
+// names show up (e.g. "CABLE Output").
+let permissionRequested = false;
+async function revealAudioInputNames() {
+  if (permissionRequested || el.audioInput.options.length > 1) return;
+  permissionRequested = true;
+  try {
+    const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+    probe.getTracks().forEach((track) => track.stop());
+  } catch {
+    // permission denied: the list keeps only "Padrão do sistema"
+  }
+  await listAudioInputs();
+}
 
-function conectarPeer(config, tentativa = 0) {
-  peer = new Peer(idDoApresentador(codigo), opcoesDoPeer(config));
+// ---------- Signaling server connection ----------
+
+function connectPeer(config, attempt = 0) {
+  peer = new Peer(presenterPeerId(code), peerOptions(config));
 
   peer.on('open', () => {
-    mostrarPainel();
-    atualizarStatus();
+    showPanel();
+    updateStatus();
+    broadcast(currentState()); // after a reconnect, let current viewers know
   });
 
-  peer.on('connection', aoConectarEspectador);
+  peer.on('connection', handleConnection);
 
-  // Caiu a conexão com o servidor do PeerJS. As lives em andamento continuam
-  // (o vídeo é direto), mas novos espectadores só entram depois de reconectar.
+  // Lost the connection to the PeerJS server. Ongoing lives keep working
+  // (video is direct), but new viewers can only join after reconnecting.
   peer.on('disconnected', () => {
-    atualizarStatus();
-    if (encerrada) return;
+    updateStatus();
+    if (ended) return;
     setTimeout(() => {
       if (peer && !peer.destroyed && peer.disconnected) peer.reconnect();
     }, 2000);
   });
 
-  peer.on('error', (erro) => {
-    console.warn('PeerJS:', erro.type, erro);
-    if (erro.type === 'unavailable-id') {
-      // Outra aba já está com este painel aberto (ou a anterior ainda não foi liberada).
+  peer.on('error', (error) => {
+    console.warn('PeerJS:', error.type, error);
+    if (error.type === 'unavailable-id') {
+      // Another tab already has this panel open (or the previous one wasn't released yet).
       peer.destroy();
-      if (tentativa < 3) {
-        mostrarMensagem('Conectando...', 'Liberando a sala, só um instante.', { carregando: true, acao: false });
-        setTimeout(() => conectarPeer(config, tentativa + 1), 3000);
+      if (attempt < 3) {
+        showMessage('Conectando...', 'Liberando a sala, só um instante.', { loading: true, action: false });
+        setTimeout(() => connectPeer(config, attempt + 1), 3000);
       } else {
-        mostrarMensagem(
+        showMessage(
           'Este painel já está aberto',
           'A sala já está sendo apresentada em outra aba ou dispositivo. Feche a outra aba e recarregue esta página.',
         );
       }
-    } else if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(erro.type)) {
-      atualizarStatus();
+    } else if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(error.type)) {
+      updateStatus();
     }
-  });
-
-  peer.on('open', () => {
-    // Reconectou: avisa quem já estava assistindo.
-    enviarParaTodos(estadoAtual());
   });
 }
 
-// ---------- Início ----------
+// ---------- Startup ----------
 
-async function iniciar() {
-  if (!codigo || !chave) {
-    mostrarMensagem('Link inválido', 'Este link de apresentador está incompleto. Crie uma nova live.');
+async function init() {
+  if (!code || !key) {
+    showMessage('Link inválido', 'Este link de apresentador está incompleto. Crie uma nova live.');
     return;
   }
 
   if (!navigator.mediaDevices?.getDisplayMedia) {
-    el.apresentar.disabled = true;
-    el.avisoSuporte.textContent =
+    el.presentBtn.disabled = true;
+    el.supportNotice.textContent =
       'Este navegador não permite compartilhar a tela. Use Chrome, Edge ou Firefox em um computador.';
   }
 
   try {
-    const resposta = await fetch(`/api/verificar?codigo=${codigo}&k=${encodeURIComponent(chave)}`);
-    if (!resposta.ok) {
-      mostrarMensagem('Link inválido', 'Este link de apresentador não é válido. Crie uma nova live.');
+    const response = await fetch(`/api/verify?code=${code}&k=${encodeURIComponent(key)}`);
+    if (!response.ok) {
+      showMessage('Link inválido', 'Este link de apresentador não é válido. Crie uma nova live.');
       return;
     }
   } catch {
-    mostrarMensagem('Sem conexão', 'Não foi possível falar com o servidor. Verifique sua internet e recarregue.');
+    showMessage('Sem conexão', 'Não foi possível falar com o servidor. Verifique sua internet e recarregue.');
     return;
   }
 
-  el.titulo.value = params.get('titulo') ?? '';
-  el.linkPublico.value = `${location.origin}/ver/${codigo}`;
-  aplicarQualidade();
+  // "titulo" is still read so links created before the translation keep their title.
+  el.title.value = params.get('title') ?? params.get('titulo') ?? '';
+  el.watchLink.value = `${location.origin}/ver/${code}`;
+  applyQuality();
 
-  const config = await carregarConfig();
-  conectarPeer(config);
+  connectPeer(await loadConfig());
 }
 
-el.apresentar.addEventListener('click', apresentar);
-el.trocar.addEventListener('click', trocarTela);
-el.parar.addEventListener('click', pararApresentacao);
-el.encerrar.addEventListener('click', encerrarLive);
-el.qualidade.addEventListener('change', aplicarQualidade);
-el.reacoesAtivas.addEventListener('change', () => enviarParaTodos(estadoAtual()));
-el.copiarLink.addEventListener('click', () => copiarTexto(el.linkPublico.value, el.copiarLink));
-el.entradaAudio.addEventListener('change', async () => {
-  if (!el.microfone.checked) return;
-  desligarMicrofone();
-  await ligarMicrofone(); // troca a entrada sem precisar desligar a chave
+el.presentBtn.addEventListener('click', startPresenting);
+el.switchScreen.addEventListener('click', switchScreen);
+el.stop.addEventListener('click', stopPresenting);
+el.endLive.addEventListener('click', confirmEndLive);
+el.quality.addEventListener('change', applyQuality);
+el.reactionsEnabled.addEventListener('change', () => broadcast(currentState()));
+el.copyLink.addEventListener('click', () => copyText(el.watchLink.value, el.copyLink));
+
+el.mic.addEventListener('change', () => {
+  if (el.mic.checked) startMic();
+  else stopMic();
 });
-navigator.mediaDevices?.addEventListener?.('devicechange', listarEntradasDeAudio);
+el.audioInput.addEventListener('change', async () => {
+  if (!el.mic.checked) return;
+  stopMic();
+  await startMic(); // switches input without turning the switch off
+});
+el.audioInput.addEventListener('pointerdown', revealAudioInputNames);
+el.audioInput.addEventListener('focus', revealAudioInputNames);
+navigator.mediaDevices?.addEventListener?.('devicechange', listAudioInputs);
+listAudioInputs();
 
-// O navegador só mostra os nomes das entradas de som depois que a página
-// recebe permissão de áudio. Na primeira vez que a lista é aberta, pedimos
-// a permissão rapidinho para os nomes aparecerem (ex.: "CABLE Output").
-let permissaoPedida = false;
-async function liberarNomesDasEntradas() {
-  if (permissaoPedida || el.entradaAudio.options.length > 1) return;
-  permissaoPedida = true;
-  try {
-    const teste = await navigator.mediaDevices.getUserMedia({ audio: true });
-    teste.getTracks().forEach((t) => t.stop());
-  } catch {
-    // permissão negada: a lista fica só com "Padrão do sistema"
-  }
-  await listarEntradasDeAudio();
-}
-el.entradaAudio.addEventListener('pointerdown', liberarNomesDasEntradas);
-el.entradaAudio.addEventListener('focus', liberarNomesDasEntradas);
-listarEntradasDeAudio();
-
-el.microfone.addEventListener('change', () => {
-  if (el.microfone.checked) ligarMicrofone();
-  else desligarMicrofone();
+let titleDebounce;
+el.title.addEventListener('input', () => {
+  clearTimeout(titleDebounce);
+  titleDebounce = setTimeout(() => broadcast(currentState()), 400);
 });
 
-let esperaTitulo;
-el.titulo.addEventListener('input', () => {
-  clearTimeout(esperaTitulo);
-  esperaTitulo = setTimeout(() => enviarParaTodos(estadoAtual()), 400);
+window.addEventListener('beforeunload', (event) => {
+  if (outgoingStream && !ended) event.preventDefault();
 });
 
-window.addEventListener('beforeunload', (evento) => {
-  if (fluxo && !encerrada) evento.preventDefault();
-});
-
-iniciar();
+init();

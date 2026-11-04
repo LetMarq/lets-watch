@@ -1,7 +1,7 @@
 {
   "name": "letswatch",
   "version": "0.1.0",
-  "description": "Lives P2P de compartilhamento de tela, criadas pelo comando /live no Discord.",
+  "description": "P2P screen-sharing lives, created with the /live command on Discord.",
   "private": true,
   "type": "module",
   "engines": {
@@ -9,6 +9,6 @@
   },
   "scripts": {
     "dev": "node scripts/dev.js",
-    "registrar-comando": "node scripts/registrar-comando.js"
+    "register-command": "node scripts/register-command.js"
   }
 }

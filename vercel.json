@@ -1,20 +1,8 @@
 {
   "rewrites": [
-    {
-      "source": "/ver/:codigo",
-      "destination": "/ver.html"
-    },
-    {
-      "source": "/transmitir/:codigo",
-      "destination": "/transmitir.html"
-    },
-    {
-      "source": "/admin",
-      "destination": "/admin.html"
-    },
-    {
-      "source": "/turn",
-      "destination": "/turn.html"
-    }
+    { "source": "/ver/:code", "destination": "/watch.html" },
+    { "source": "/transmitir/:code", "destination": "/present.html" },
+    { "source": "/admin", "destination": "/admin.html" },
+    { "source": "/turn", "destination": "/turn.html" }
   ]
 }

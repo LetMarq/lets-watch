@@ -1,30 +1,30 @@
-// POST /api/admin  { "senha": "...", "codigo": "XXXXXXXX" }
-// Confere a senha de admin (variável ADMIN_PASSWORD) e devolve um token que
-// autoriza encerrar AQUELA sala. O painel do apresentador confere o token em
-// /api/verificar antes de obedecer.
-import { adminConfigurado, codigoValido, json, senhaAdminCorreta, tokenAdmin } from '../lib/sala.js';
+// POST /api/admin  { "password": "...", "code": "XXXXXXXX" }
+// Checks the admin password (ADMIN_PASSWORD) and returns a token that allows
+// ending THAT room. The presenter panel verifies the token at /api/verify
+// before obeying.
+import { adminToken, isAdminEnabled, isAdminPassword, isValidCode, json } from '../lib/room.js';
 
-const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function POST(request) {
-  if (!adminConfigurado()) {
-    return json({ erro: 'A opção de admin não está ativada: defina ADMIN_PASSWORD na Vercel.' }, 503);
+  if (!isAdminEnabled()) {
+    return json({ error: 'A opção de admin não está ativada: defina ADMIN_PASSWORD na Vercel.' }, 503);
   }
 
-  let corpo = {};
+  let body = {};
   try {
-    corpo = await request.json();
+    body = await request.json();
   } catch {
-    // corpo inválido
+    // invalid body
   }
 
-  if (!senhaAdminCorreta(corpo.senha)) {
-    await esperar(1500); // atrasa quem tenta adivinhar a senha
-    return json({ erro: 'Senha incorreta.' }, 401);
+  if (!isAdminPassword(body.password)) {
+    await wait(1500); // slows down anyone trying to guess the password
+    return json({ error: 'Senha incorreta.' }, 401);
   }
-  if (!codigoValido(corpo.codigo)) {
-    return json({ erro: 'Código da sala inválido.' }, 400);
+  if (!isValidCode(body.code)) {
+    return json({ error: 'Código da sala inválido.' }, 400);
   }
 
-  return json({ token: tokenAdmin(corpo.codigo) });
+  return json({ token: adminToken(body.code) });
 }

@@ -14,29 +14,29 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <div class="pagina-admin">
-    <a class="marca" href="/">LetsWatch <span class="listras" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></a>
+  <div class="centered-page">
+    <a class="brand" href="/">LetsWatch <span class="stripes" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></a>
 
-    <form class="deck admin" id="form-admin" autocomplete="off">
-      <div class="deck-titulo"><span>Controle remoto · Admin</span><span>LW-85</span></div>
+    <form class="deck admin" id="admin-form" autocomplete="off">
+      <div class="deck-title"><span>Controle remoto · Admin</span><span>LW-85</span></div>
 
-      <div class="visor">
-        <span class="visor-rotulo admin-visor" id="visor">Pronto</span>
+      <div class="display">
+        <span class="display-label admin-display" id="display">Pronto</span>
       </div>
 
       <div>
-        <label class="rotulo" for="senha">Senha de admin</label>
-        <input class="campo" id="senha" type="password" required autocomplete="current-password">
+        <label class="label" for="password">Senha de admin</label>
+        <input class="field" id="password" type="password" required autocomplete="current-password">
       </div>
 
       <div>
-        <label class="rotulo" for="sala">Link ou código da live</label>
-        <input class="campo" id="sala" required placeholder="https://.../ver/AbC23xYz ou AbC23xYz">
+        <label class="label" for="room">Link ou código da live</label>
+        <input class="field" id="room" required placeholder="https://.../ver/AbC23xYz ou AbC23xYz">
       </div>
 
-      <button class="botao botao-principal botao-grande" id="botao-encerrar" type="submit">⏻ Encerrar live</button>
+      <button class="btn btn-primary btn-large" id="end-btn" type="submit">⏻ Encerrar live</button>
 
-      <p class="nota">O código aparece no fim do link de assistir e no rodapé da mensagem do bot ("Fita AbC23xYz"). A live precisa estar aberta: o comando é enviado ao painel do apresentador, que encerra a transmissão para todos.</p>
+      <p class="note">O código aparece no fim do link de assistir e no rodapé da mensagem do bot ("Fita AbC23xYz"). A live precisa estar aberta: o comando é enviado ao painel do apresentador, que encerra a transmissão para todos.</p>
     </form>
   </div>
 

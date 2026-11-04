@@ -1,6 +1,6 @@
-// Servidor local para testar no seu computador:  npm run dev
-// Imita o que a Vercel faz: serve a pasta public/, as rotas /ver e /transmitir,
-// e as funções da pasta api/.
+// Local server for testing on your computer:  npm run dev
+// Mimics what Vercel does: serves public/, the /ver, /transmitir, /admin and
+// /turn pages, and the functions in api/.
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -9,19 +9,19 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 try {
   process.loadEnvFile();
 } catch {
-  // sem .env
+  // no .env
 }
 
 if (!process.env.LETSWATCH_SECRET) {
-  process.env.LETSWATCH_SECRET = 'segredo-so-para-testes-locais';
+  process.env.LETSWATCH_SECRET = 'local-testing-only-secret';
   console.warn('Aviso: LETSWATCH_SECRET vazio. Usando um segredo de teste.');
 }
 
-const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const pastaPublica = path.join(raiz, 'public');
-const porta = Number(process.env.PORT || 3000);
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const publicDir = path.join(root, 'public');
+const port = Number(process.env.PORT || 3000);
 
-const TIPOS = {
+const CONTENT_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -31,47 +31,56 @@ const TIPOS = {
   '.ico': 'image/x-icon',
 };
 
-async function lerCorpo(req) {
-  const partes = [];
-  for await (const parte of req) partes.push(parte);
-  return Buffer.concat(partes);
+// Same rewrites as vercel.json
+const PAGES = [
+  [/^\/$/, 'index.html'],
+  [/^\/ver\/[^/]+$/, 'watch.html'],
+  [/^\/transmitir\/[^/]+$/, 'present.html'],
+  [/^\/admin$/, 'admin.html'],
+  [/^\/turn$/, 'turn.html'],
+];
+
+async function readBody(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  return Buffer.concat(chunks);
 }
 
-async function rodarApi(req, res, nome) {
-  const arquivo = path.join(raiz, 'api', `${nome}.js`);
-  let modulo;
+async function runApi(req, res, name) {
+  const file = path.join(root, 'api', `${name}.js`);
+  let module;
   try {
-    modulo = await import(pathToFileURL(arquivo).href);
+    module = await import(pathToFileURL(file).href);
   } catch {
     res.writeHead(404).end('Rota não encontrada');
     return;
   }
-  const handler = modulo[req.method];
+  const handler = module[req.method];
   if (!handler) {
     res.writeHead(405).end('Método não permitido');
     return;
   }
-  const corpo = ['GET', 'HEAD'].includes(req.method) ? undefined : await lerCorpo(req);
+  const body = ['GET', 'HEAD'].includes(req.method) ? undefined : await readBody(req);
   const request = new Request(`http://${req.headers.host}${req.url}`, {
     method: req.method,
     headers: req.headers,
-    body: corpo,
+    body,
   });
-  const resposta = await handler(request);
-  res.writeHead(resposta.status, Object.fromEntries(resposta.headers));
-  res.end(Buffer.from(await resposta.arrayBuffer()));
+  const response = await handler(request);
+  res.writeHead(response.status, Object.fromEntries(response.headers));
+  res.end(Buffer.from(await response.arrayBuffer()));
 }
 
-async function servirArquivo(res, caminho) {
-  const destino = path.normalize(path.join(pastaPublica, caminho));
-  if (!destino.startsWith(pastaPublica)) {
+async function serveFile(res, relativePath) {
+  const target = path.normalize(path.join(publicDir, relativePath));
+  if (!target.startsWith(publicDir)) {
     res.writeHead(403).end();
     return;
   }
   try {
-    const conteudo = await fs.readFile(destino);
-    res.writeHead(200, { 'content-type': TIPOS[path.extname(destino)] ?? 'application/octet-stream' });
-    res.end(conteudo);
+    const content = await fs.readFile(target);
+    res.writeHead(200, { 'content-type': CONTENT_TYPES[path.extname(target)] ?? 'application/octet-stream' });
+    res.end(content);
   } catch {
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('Página não encontrada');
   }
@@ -82,18 +91,15 @@ http
     try {
       const { pathname } = new URL(req.url, 'http://localhost');
       const api = pathname.match(/^\/api\/([\w-]+)$/);
-      if (api) return await rodarApi(req, res, api[1]);
-      if (/^\/ver\/[^/]+$/.test(pathname)) return await servirArquivo(res, 'ver.html');
-      if (/^\/transmitir\/[^/]+$/.test(pathname)) return await servirArquivo(res, 'transmitir.html');
-      if (pathname === '/') return await servirArquivo(res, 'index.html');
-      if (pathname === '/admin') return await servirArquivo(res, 'admin.html');
-      if (pathname === '/turn') return await servirArquivo(res, 'turn.html');
-      return await servirArquivo(res, decodeURIComponent(pathname));
-    } catch (erro) {
-      console.error(erro);
+      if (api) return await runApi(req, res, api[1]);
+      const page = PAGES.find(([pattern]) => pattern.test(pathname));
+      if (page) return await serveFile(res, page[1]);
+      return await serveFile(res, decodeURIComponent(pathname));
+    } catch (error) {
+      console.error(error);
       res.writeHead(500).end('Erro interno');
     }
   })
-  .listen(porta, () => {
-    console.log(`LetsWatch rodando em http://localhost:${porta}`);
+  .listen(port, () => {
+    console.log(`LetsWatch rodando em http://localhost:${port}`);
   });

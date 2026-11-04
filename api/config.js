@@ -1,33 +1,35 @@
 // GET /api/config
-// Diz ao navegador quais servidores usar para montar a conexão P2P:
-// - iceServers: STUN (descobrir o próprio IP público) e TURN (repassar o vídeo
-//   quando a rede bloqueia a conexão direta)
-// - peer: servidor de sinalização PeerJS próprio (null = servidor público gratuito)
+// Tells the browser which servers to use to set up the P2P connection:
+// - iceServers: STUN (discover the public IP) and TURN (relay the video when
+//   the network blocks the direct connection)
+// - peer: self-hosted PeerJS signaling server (null = free public server)
 //
-// TURN, em ordem de preferência:
-// 1. Cloudflare (1.000 GB grátis/mês, pede cartão): CF_TURN_KEY_ID e CF_TURN_API_TOKEN
-// 2. Metered com conta própria: METERED_TURN_URL
-// 3. Qualquer TURN com usuário e senha fixos (ex.: ExpressTURN): TURN_URL, TURN_USERNAME, TURN_CREDENTIAL
-// 4. Nada configurado: usa o servidor público e gratuito do Open Relay, sem cadastro.
-//    Para desligar, defina TURN_OPENRELAY=false.
+// TURN, in order of preference:
+// 1. Cloudflare (1,000 GB free/month, needs a card): CF_TURN_KEY_ID and CF_TURN_API_TOKEN
+// 2. Metered with your own account: METERED_TURN_URL
+// 3. Any TURN with fixed username/password (e.g. ExpressTURN): TURN_URL, TURN_USERNAME, TURN_CREDENTIAL
+// 4. Nothing configured: the free public Open Relay server, no sign-up.
+//    To turn it off, set TURN_OPENRELAY=false.
 //
-// Contas extras (ex.: outras contas grátis da ExpressTURN): TURN_URL_2,
-// TURN_USERNAME_2, TURN_CREDENTIAL_2 ... até _5. O navegador tenta todas ao
-// mesmo tempo: se a cota de uma acabar, as outras continuam funcionando.
+// Extra accounts (e.g. friends' free ExpressTURN accounts): TURN_URL_2,
+// TURN_USERNAME_2, TURN_CREDENTIAL_2 ... up to _5. The browser tries all of
+// them at once: if one runs out of quota, the others keep working.
 import crypto from 'node:crypto';
-import { json } from '../lib/sala.js';
+import { json } from '../lib/room.js';
 
-// Open Relay (https://www.metered.ca/tools/openrelay/): servidor TURN gratuito
-// da Metered. O segredo abaixo é público, publicado por eles para uso livre.
-// A senha é gerada no formato padrão "TURN REST API": usuário = validade:nome,
-// senha = HMAC-SHA1 do usuário com o segredo.
+// Open Relay (https://www.metered.ca/tools/openrelay/): free TURN server by
+// Metered. The secret below is public, published by them for anyone to use.
+// Credentials follow the standard "TURN REST API" format:
+// username = expiry:name, password = HMAC-SHA1(username, secret).
 const OPENRELAY_HOST = 'staticauth.openrelay.metered.ca';
-const OPENRELAY_SEGREDO = 'openrelayprojectsecret';
+const OPENRELAY_SECRET = 'openrelayprojectsecret';
 
-function turnOpenRelay() {
-  const validade = Math.floor(Date.now() / 1000) + 24 * 60 * 60; // 24 h
-  const username = `${validade}:letswatch`;
-  const credential = crypto.createHmac('sha1', OPENRELAY_SEGREDO).update(username).digest('base64');
+const DEFAULT_STUN = { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] };
+
+function openRelayTurn() {
+  const expiry = Math.floor(Date.now() / 1000) + 24 * 60 * 60; // 24 h
+  const username = `${expiry}:letswatch`;
+  const credential = crypto.createHmac('sha1', OPENRELAY_SECRET).update(username).digest('base64');
   return [
     {
       urls: [
@@ -42,24 +44,24 @@ function turnOpenRelay() {
   ];
 }
 
-const STUN_PADRAO = { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] };
-
-function lista(valor) {
-  return String(valor).split(',').map((s) => s.trim()).filter(Boolean);
+function splitList(value) {
+  return String(value).split(',').map((item) => item.trim()).filter(Boolean);
 }
 
-// A porta 53 costuma ser bloqueada nos navegadores e só atrasa a conexão.
-function semPorta53(servidores) {
-  return servidores
-    .map((s) => {
-      const urls = (Array.isArray(s.urls) ? s.urls : [s.urls]).filter((u) => !/:53(\?|$)/.test(u));
-      return { ...s, urls };
+// Port 53 is often blocked in browsers and only slows the connection down.
+function withoutPort53(servers) {
+  return servers
+    .map((server) => {
+      const urls = (Array.isArray(server.urls) ? server.urls : [server.urls]).filter(
+        (url) => !/:53(\?|$)/.test(url),
+      );
+      return { ...server, urls };
     })
-    .filter((s) => s.urls.length);
+    .filter((server) => server.urls.length);
 }
 
-async function turnCloudflare(env) {
-  const resposta = await fetch(
+async function cloudflareTurn(env) {
+  const response = await fetch(
     `https://rtc.live.cloudflare.com/v1/turn/keys/${env.CF_TURN_KEY_ID}/credentials/generate-ice-servers`,
     {
       method: 'POST',
@@ -67,49 +69,53 @@ async function turnCloudflare(env) {
         Authorization: `Bearer ${env.CF_TURN_API_TOKEN}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ ttl: 86400 }), // credencial vale 24 h
+      body: JSON.stringify({ ttl: 86400 }), // credential valid for 24 h
       signal: AbortSignal.timeout(5000),
     },
   );
-  if (!resposta.ok) throw new Error(`Cloudflare TURN respondeu ${resposta.status}`);
-  const { iceServers } = await resposta.json();
-  return semPorta53(iceServers);
+  if (!response.ok) throw new Error(`Cloudflare TURN responded ${response.status}`);
+  const { iceServers } = await response.json();
+  return withoutPort53(iceServers);
 }
 
-async function turnMetered(env) {
-  const resposta = await fetch(env.METERED_TURN_URL, { signal: AbortSignal.timeout(5000) });
-  if (!resposta.ok) throw new Error(`Metered TURN respondeu ${resposta.status}`);
-  return semPorta53(await resposta.json());
+async function meteredTurn(env) {
+  const response = await fetch(env.METERED_TURN_URL, { signal: AbortSignal.timeout(5000) });
+  if (!response.ok) throw new Error(`Metered TURN responded ${response.status}`);
+  return withoutPort53(await response.json());
 }
 
-async function servidoresTurn(env) {
+async function mainTurnServers(env) {
   try {
-    if (env.CF_TURN_KEY_ID && env.CF_TURN_API_TOKEN) return await turnCloudflare(env);
-    if (env.METERED_TURN_URL) return await turnMetered(env);
-  } catch (erro) {
-    console.error('Não foi possível obter o TURN:', erro.message);
+    if (env.CF_TURN_KEY_ID && env.CF_TURN_API_TOKEN) return await cloudflareTurn(env);
+    if (env.METERED_TURN_URL) return await meteredTurn(env);
+  } catch (error) {
+    console.error('Could not get TURN credentials:', error.message);
     return [];
   }
   if (env.TURN_URL) {
-    return [{ urls: lista(env.TURN_URL), username: env.TURN_USERNAME, credential: env.TURN_CREDENTIAL }];
+    return [{ urls: splitList(env.TURN_URL), username: env.TURN_USERNAME, credential: env.TURN_CREDENTIAL }];
   }
-  if (env.TURN_OPENRELAY !== 'false') return turnOpenRelay();
+  if (env.TURN_OPENRELAY !== 'false') return openRelayTurn();
   return [];
 }
 
-function turnsExtras(env) {
+function extraTurnServers(env) {
   const extras = [];
   for (let i = 2; i <= 5; i++) {
     const url = env[`TURN_URL_${i}`];
-    if (!url) continue;
-    extras.push({ urls: lista(url), username: env[`TURN_USERNAME_${i}`], credential: env[`TURN_CREDENTIAL_${i}`] });
+    if (!url) continue; // not configured: skip
+    extras.push({
+      urls: splitList(url),
+      username: env[`TURN_USERNAME_${i}`],
+      credential: env[`TURN_CREDENTIAL_${i}`],
+    });
   }
   return extras;
 }
 
 export async function GET() {
   const env = process.env;
-  const turn = [...(await servidoresTurn(env)), ...turnsExtras(env)];
+  const turn = [...(await mainTurnServers(env)), ...extraTurnServers(env)];
 
   let peer = null;
   if (env.PEER_HOST) {
@@ -121,5 +127,5 @@ export async function GET() {
     };
   }
 
-  return json({ peer, iceServers: [STUN_PADRAO, ...turn], temTurn: turn.length > 0 });
+  return json({ peer, iceServers: [DEFAULT_STUN, ...turn], hasTurn: turn.length > 0 });
 }

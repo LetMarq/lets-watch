@@ -14,59 +14,59 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <div class="pagina-admin">
-    <a class="marca" href="/">LetsWatch <span class="listras" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></a>
+  <div class="centered-page">
+    <a class="brand" href="/">LetsWatch <span class="stripes" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></a>
 
     <section class="deck admin">
-      <div class="deck-titulo"><span>Meu TURN</span><span>LW-85</span></div>
+      <div class="deck-title"><span>Meu TURN</span><span>LW-85</span></div>
 
-      <div class="visor">
-        <span class="visor-rotulo admin-visor" id="visor">Carregando...</span>
+      <div class="display">
+        <span class="display-label admin-display" id="display">Carregando...</span>
       </div>
 
-      <p class="nota">
+      <p class="note">
         O TURN repassa o vídeo quando a sua rede (4G, 5G, empresa, faculdade) bloqueia a conexão direta.
         Se você cadastrar um TURN seu aqui, <b>ele é usado primeiro</b> neste navegador. Se não cadastrar,
         ou se o seu parar de funcionar, o LetsWatch usa o TURN do site.
       </p>
 
-      <!-- TURN já salvo -->
-      <div class="turn-salvo escondido" id="salvo">
-        <span class="rotulo">Salvo neste navegador</span>
-        <div class="turn-salvo-dados">
-          <span id="salvo-servidor"></span>
-          <span id="salvo-usuario"></span>
+      <!-- TURN already saved -->
+      <div class="turn-saved hidden" id="saved">
+        <span class="label">Salvo neste navegador</span>
+        <div class="turn-saved-data">
+          <span id="saved-server"></span>
+          <span id="saved-user"></span>
         </div>
-        <div class="teclas">
-          <button class="botao" id="testar-salvo" type="button">▶ Testar</button>
-          <button class="botao botao-perigo" id="remover" type="button">✕ Remover</button>
+        <div class="keys">
+          <button class="btn" id="test-saved" type="button">▶ Testar</button>
+          <button class="btn btn-danger" id="remove" type="button">✕ Remover</button>
         </div>
       </div>
 
-      <!-- Cadastrar / trocar -->
-      <form class="formulario-turn" id="form-turn" autocomplete="off">
-        <span class="rotulo" id="titulo-form">Cadastrar um TURN</span>
-        <ol class="passos-turn">
+      <!-- Add / replace -->
+      <form class="turn-form" id="turn-form" autocomplete="off">
+        <span class="label" id="form-title">Cadastrar um TURN</span>
+        <ol class="turn-steps">
           <li>Crie uma conta grátis na <a href="https://www.expressturn.com/" target="_blank" rel="noopener">ExpressTURN</a> (1 TB por mês no plano grátis).</li>
           <li>No <b>Dashboard</b>, copie <b>TURN Servers</b>, <b>Username</b> e <b>Password</b> com os botões de copiar.</li>
           <li>Cole abaixo e clique em <b>Testar e salvar</b>.</li>
         </ol>
         <div>
-          <label class="rotulo" for="servidor">TURN Servers</label>
-          <input class="campo" id="servidor" required placeholder="free.expressturn.com:3478" spellcheck="false">
+          <label class="label" for="server">TURN Servers</label>
+          <input class="field" id="server" required placeholder="free.expressturn.com:3478" spellcheck="false">
         </div>
         <div>
-          <label class="rotulo" for="usuario">Username</label>
-          <input class="campo" id="usuario" required spellcheck="false">
+          <label class="label" for="username">Username</label>
+          <input class="field" id="username" required spellcheck="false">
         </div>
         <div>
-          <label class="rotulo" for="senha">Password</label>
-          <input class="campo" id="senha" type="password" required spellcheck="false">
+          <label class="label" for="password">Password</label>
+          <input class="field" id="password" type="password" required spellcheck="false">
         </div>
-        <button class="botao botao-principal botao-grande" id="salvar" type="submit">▶ Testar e salvar</button>
+        <button class="btn btn-primary btn-large" id="save" type="submit">▶ Testar e salvar</button>
       </form>
 
-      <p class="nota">Fica salvo só neste navegador e neste aparelho, e nunca é enviado para o site. Em outro aparelho, cadastre de novo.</p>
+      <p class="note">Fica salvo só neste navegador e neste aparelho, e nunca é enviado para o site. Em outro aparelho, cadastre de novo.</p>
     </section>
   </div>
 

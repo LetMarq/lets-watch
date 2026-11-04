@@ -1,68 +1,74 @@
 // POST /api/discord
-// "Interactions Endpoint URL" do Discord: o Discord chama esta rota sempre que
-// alguém usa o /live ou clica num botão do bot. Por isso o bot não precisa
-// ficar ligado 24h — funciona de graça na Vercel.
+// Discord "Interactions Endpoint URL": Discord calls this route whenever
+// someone uses /live or clicks one of the bot's buttons. That's why the bot
+// doesn't need to stay online 24/7 — it runs for free on Vercel.
 import crypto from 'node:crypto';
-import { criarSala, linkApresentador, json } from '../lib/sala.js';
+import { createRoom, json, presenterLink } from '../lib/room.js';
 
-const PING = 1;
-const COMANDO = 2;
-const BOTAO = 3;
+const INTERACTION_PING = 1;
+const INTERACTION_COMMAND = 2;
+const INTERACTION_BUTTON = 3;
 
-const RESPOSTA_PONG = 1;
-const RESPOSTA_MENSAGEM = 4;
+const RESPONSE_PONG = 1;
+const RESPONSE_MESSAGE = 4;
 
-const EFEMERA = 64; // mensagem que só quem clicou consegue ver
-const COR = 0xe8443a; // vermelho do "REC"
+const EPHEMERAL = 64; // message only the person who clicked can see
+const EMBED_COLOR = 0xe8443a; // the "REC" red
+const DEFAULT_TITLE = 'Live no LetsWatch';
 
-// O Discord assina cada requisição. Se a assinatura não bater, recusamos —
-// o próprio Discord testa isso quando você salva a URL no Developer Portal.
-function assinaturaValida(corpo, assinatura, timestamp) {
-  const chavePublica = process.env.DISCORD_PUBLIC_KEY;
-  if (!chavePublica || !assinatura || !timestamp) return false;
+// "present:" is the current button id; "apresentar:" is kept so buttons on
+// messages posted before the code was translated keep working.
+const PRESENT_BUTTON = /^(present|apresentar):/;
+
+// Discord signs every request. If the signature doesn't match, we refuse —
+// Discord itself tests this when you save the URL in the Developer Portal.
+function isValidSignature(body, signature, timestamp) {
+  const publicKey = process.env.DISCORD_PUBLIC_KEY;
+  if (!publicKey || !signature || !timestamp) return false;
   try {
-    const chave = crypto.createPublicKey({
-      key: { kty: 'OKP', crv: 'Ed25519', x: Buffer.from(chavePublica, 'hex').toString('base64url') },
+    const key = crypto.createPublicKey({
+      key: { kty: 'OKP', crv: 'Ed25519', x: Buffer.from(publicKey, 'hex').toString('base64url') },
       format: 'jwk',
     });
-    return crypto.verify(null, Buffer.from(timestamp + corpo), chave, Buffer.from(assinatura, 'hex'));
+    return crypto.verify(null, Buffer.from(timestamp + body), key, Buffer.from(signature, 'hex'));
   } catch {
     return false;
   }
 }
 
-function mensagemEfemera(conteudo, extra = {}) {
-  return json({ type: RESPOSTA_MENSAGEM, data: { flags: EFEMERA, content: conteudo, ...extra } });
+function ephemeralMessage(content, extra = {}) {
+  return json({ type: RESPONSE_MESSAGE, data: { flags: EPHEMERAL, content, ...extra } });
 }
 
-function comandoLive(request, interacao, usuario) {
-  const titulo = interacao.data.options?.find((o) => o.name === 'titulo')?.value;
-  const sala = criarSala(request, titulo);
-  const nome = usuario.global_name || usuario.username;
+function handleLiveCommand(request, interaction, user) {
+  // The option name stays in Portuguese because people see it in Discord.
+  const title = interaction.data.options?.find((option) => option.name === 'titulo')?.value;
+  const room = createRoom(request, title);
+  const name = user.global_name || user.username;
 
   return json({
-    type: RESPOSTA_MENSAGEM,
+    type: RESPONSE_MESSAGE,
     data: {
       allowed_mentions: { parse: [] },
       embeds: [
         {
-          title: `📼 ${sala.titulo || 'Live no LetsWatch'}`,
-          url: sala.linkPublico,
-          description: `**${nome}** vai apresentar a tela.\nAperte **▶ Assistir** para entrar, direto no navegador.`,
-          color: COR,
-          footer: { text: `Fita ${sala.codigo} · Rebobine antes de devolver` },
+          title: `📼 ${room.title || DEFAULT_TITLE}`,
+          url: room.watchLink,
+          description: `**${name}** vai apresentar a tela.\nAperte **▶ Assistir** para entrar, direto no navegador.`,
+          color: EMBED_COLOR,
+          footer: { text: `Fita ${room.code} · Rebobine antes de devolver` },
         },
       ],
       components: [
         {
           type: 1,
           components: [
-            { type: 2, style: 5, label: '▶ Assistir', url: sala.linkPublico },
+            { type: 2, style: 5, label: '▶ Assistir', url: room.watchLink },
             {
               type: 2,
               style: 2,
               label: 'Sou o apresentador',
-              custom_id: `apresentar:${sala.codigo}:${usuario.id}`,
+              custom_id: `present:${room.code}:${user.id}`,
             },
           ],
         },
@@ -71,18 +77,18 @@ function comandoLive(request, interacao, usuario) {
   });
 }
 
-function botaoApresentar(request, interacao, usuario) {
-  const [, codigo, donoId] = interacao.data.custom_id.split(':');
+function handlePresentButton(request, interaction, user) {
+  const [, code, ownerId] = interaction.data.custom_id.split(':');
 
-  if (usuario.id !== donoId) {
-    return mensagemEfemera('Só quem criou esta live pode apresentar. Use `/live` para criar a sua.');
+  if (user.id !== ownerId) {
+    return ephemeralMessage('Só quem criou esta live pode apresentar. Use `/live` para criar a sua.');
   }
 
-  const tituloEmbed = interacao.message?.embeds?.[0]?.title ?? '';
-  const titulo = tituloEmbed.replace(/^📼\s*/, '').replace(/^Live no LetsWatch$/, '');
-  const link = linkApresentador(request, codigo, titulo);
+  const embedTitle = interaction.message?.embeds?.[0]?.title ?? '';
+  const title = embedTitle.replace(/^📼\s*/, '').replace(new RegExp(`^${DEFAULT_TITLE}$`), '');
+  const link = presenterLink(request, code, title);
 
-  return mensagemEfemera(
+  return ephemeralMessage(
     'Este é o seu link de apresentador. **Não compartilhe**: quem tiver ele consegue transmitir na sala.',
     {
       components: [
@@ -93,26 +99,26 @@ function botaoApresentar(request, interacao, usuario) {
 }
 
 export async function POST(request) {
-  const corpo = await request.text();
-  const valida = assinaturaValida(
-    corpo,
+  const body = await request.text();
+  const valid = isValidSignature(
+    body,
     request.headers.get('x-signature-ed25519'),
     request.headers.get('x-signature-timestamp'),
   );
-  if (!valida) return new Response('Assinatura inválida', { status: 401 });
+  if (!valid) return new Response('Assinatura inválida', { status: 401 });
 
-  const interacao = JSON.parse(corpo);
-  if (interacao.type === PING) return json({ type: RESPOSTA_PONG });
+  const interaction = JSON.parse(body);
+  if (interaction.type === INTERACTION_PING) return json({ type: RESPONSE_PONG });
 
-  const usuario = interacao.member?.user ?? interacao.user;
+  const user = interaction.member?.user ?? interaction.user;
 
-  if (interacao.type === COMANDO && interacao.data?.name === 'live') {
-    return comandoLive(request, interacao, usuario);
+  if (interaction.type === INTERACTION_COMMAND && interaction.data?.name === 'live') {
+    return handleLiveCommand(request, interaction, user);
   }
 
-  if (interacao.type === BOTAO && interacao.data?.custom_id?.startsWith('apresentar:')) {
-    return botaoApresentar(request, interacao, usuario);
+  if (interaction.type === INTERACTION_BUTTON && PRESENT_BUTTON.test(interaction.data?.custom_id ?? '')) {
+    return handlePresentButton(request, interaction, user);
   }
 
-  return mensagemEfemera('Comando desconhecido.');
+  return ephemeralMessage('Comando desconhecido.');
 }
