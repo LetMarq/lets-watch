@@ -1,104 +1,105 @@
-// Código compartilhado entre o painel do apresentador e a página de assistir.
+// Code shared by the presenter panel and the watch page.
 
-// O apresentador se registra no PeerJS com o ID "letswatch-<codigo>".
-// Os espectadores sabem o código pelo link, então sabem para quem ligar.
-export const PREFIXO_PEER = 'letswatch-';
+// The presenter registers on PeerJS with the id "letswatch-<code>".
+// Viewers know the code from the link, so they know who to call.
+export const PEER_PREFIX = 'letswatch-';
 
-export function idDoApresentador(codigo) {
-  return PREFIXO_PEER + codigo;
+export function presenterPeerId(code) {
+  return PEER_PREFIX + code;
 }
 
-export function codigoDaUrl() {
-  const encontrado = location.pathname.match(/^\/(?:ver|transmitir)\/([A-Za-z0-9]{8})\/?$/);
-  return encontrado ? encontrado[1] : null;
+// Room links keep their Portuguese paths: /ver/<code> and /transmitir/<code>.
+export function codeFromUrl() {
+  const match = location.pathname.match(/^\/(?:ver|transmitir)\/([A-Za-z0-9]{8})\/?$/);
+  return match ? match[1] : null;
 }
 
-// ---------- TURN cadastrado neste navegador (página /turn) ----------
-// Cada pessoa pode cadastrar um TURN próprio (ex.: uma conta grátis dela na
-// ExpressTURN). Ele fica salvo só neste navegador (localStorage) e vai PRIMEIRO
-// na lista: o Chrome dá mais prioridade aos TURNs do começo da lista. Os do
-// site continuam na lista como reserva, caso o da pessoa pare de funcionar.
+// ---------- TURN saved in this browser (/turn page) ----------
+// Anyone can save their own TURN (e.g. their own free ExpressTURN account).
+// It is stored only in this browser (localStorage) and goes FIRST in the
+// list: Chrome gives more priority to the TURN servers at the top. The site's
+// servers stay in the list as a fallback, in case the personal one stops working.
 
-const CHAVE_TURN = 'letswatch-turn';
+const TURN_STORAGE_KEY = 'letswatch-turn';
 
-export function turnsDoNavegador() {
+export function browserTurns() {
   try {
-    const salvos = JSON.parse(localStorage.getItem(CHAVE_TURN) || '[]');
-    return Array.isArray(salvos) ? salvos : [];
+    const saved = JSON.parse(localStorage.getItem(TURN_STORAGE_KEY) || '[]');
+    return Array.isArray(saved) ? saved : [];
   } catch {
     return [];
   }
 }
 
-export function salvarTurnsDoNavegador(lista) {
+export function saveBrowserTurns(list) {
   try {
-    localStorage.setItem(CHAVE_TURN, JSON.stringify(lista));
+    localStorage.setItem(TURN_STORAGE_KEY, JSON.stringify(list));
     return true;
   } catch {
-    return false; // navegação anônima ou armazenamento bloqueado
+    return false; // private window or blocked storage
   }
 }
 
-// Busca no backend quais servidores STUN/TURN e PeerJS usar
-// e junta com o TURN cadastrado neste navegador, se houver.
-export async function carregarConfig() {
-  let config = { peer: null, iceServers: [{ urls: 'stun:stun.l.google.com:19302' }], temTurn: false };
+// Asks the backend which STUN/TURN and PeerJS servers to use,
+// and adds the TURN saved in this browser, if any.
+export async function loadConfig() {
+  let config = { peer: null, iceServers: [{ urls: 'stun:stun.l.google.com:19302' }], hasTurn: false };
   try {
-    const resposta = await fetch('/api/config');
-    if (resposta.ok) config = await resposta.json();
+    const response = await fetch('/api/config');
+    if (response.ok) config = await response.json();
   } catch {
-    // sem backend (ex.: abrindo o HTML direto): usa o padrão
+    // no backend (e.g. opening the HTML file directly): use the default
   }
-  const meus = turnsDoNavegador();
-  if (meus.length) {
-    config.iceServers = [...meus, ...config.iceServers];
-    config.temTurn = true;
+  const own = browserTurns();
+  if (own.length) {
+    config.iceServers = [...own, ...config.iceServers];
+    config.hasTurn = true;
   }
   return config;
 }
 
-export function opcoesDoPeer(config) {
+export function peerOptions(config) {
   return {
     ...(config.peer ?? {}),
     config: { iceServers: config.iceServers },
-    debug: 1, // 0 = nada, 3 = tudo. Aumente para investigar problemas no console.
+    debug: 1, // 0 = nothing, 3 = everything. Raise it to debug problems in the console.
   };
 }
 
-export async function copiarTexto(texto, botao) {
+export async function copyText(text, button) {
   try {
-    await navigator.clipboard.writeText(texto);
+    await navigator.clipboard.writeText(text);
   } catch {
-    const campo = document.createElement('textarea');
-    campo.value = texto;
-    document.body.append(campo);
-    campo.select();
+    const field = document.createElement('textarea');
+    field.value = text;
+    document.body.append(field);
+    field.select();
     document.execCommand('copy');
-    campo.remove();
+    field.remove();
   }
-  if (botao) {
-    const original = botao.textContent;
-    botao.textContent = 'Copiado!';
-    setTimeout(() => (botao.textContent = original), 1500);
+  if (button) {
+    const original = button.textContent;
+    button.textContent = 'Copiado!';
+    setTimeout(() => (button.textContent = original), 1500);
   }
 }
 
-// ---------- Reações (emojis) ----------
-// Só estes emojis são aceitos: o apresentador ignora qualquer outra coisa.
-export const REACOES = ['👍', '❤️', '😂', '😮', '👏', '🔥', '🎉', '😢'];
+// ---------- Reactions (emojis) ----------
+// Only these emojis are accepted: the presenter ignores anything else.
+export const REACTIONS = ['👍', '❤️', '😂', '😮', '👏', '🔥', '🎉', '😢'];
 
-// Solta um emoji que sobe flutuando dentro de "camada" e some sozinho.
-export function soltarEmoji(camada, emoji) {
-  if (!camada || !REACOES.includes(emoji)) return;
+// Launches an emoji that floats up inside "layer" and disappears by itself.
+export function launchEmoji(layer, emoji) {
+  if (!layer || !REACTIONS.includes(emoji)) return;
   const el = document.createElement('span');
-  el.className = 'emoji-voando';
+  el.className = 'floating-emoji';
   el.textContent = emoji;
   el.style.left = `${62 + Math.random() * 30}%`;
-  el.style.setProperty('--desvio', `${Math.round(Math.random() * 80 - 40)}px`);
+  el.style.setProperty('--drift', `${Math.round(Math.random() * 80 - 40)}px`);
   el.addEventListener('animationend', () => el.remove());
-  camada.append(el);
+  layer.append(el);
 }
 
-export function plural(n, singular, pluralTexto) {
-  return `${n} ${n === 1 ? singular : pluralTexto}`;
+export function plural(n, singular, pluralForm) {
+  return `${n} ${n === 1 ? singular : pluralForm}`;
 }

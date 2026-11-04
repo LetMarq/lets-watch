@@ -1,207 +1,201 @@
 # LetsWatch
 
-Lives de compartilhamento de tela, de pessoa para pessoa (P2P). Alguém digita `/live` no Discord, abre o painel, escolhe **tela inteira, janela ou guia** (igual ao Google Meet) e os amigos assistem pelo link, direto no navegador.
+Peer-to-peer (P2P) screen-sharing lives. Someone types `/live` on Discord, opens the presenter panel, picks the **entire screen, a window or a tab** (just like Google Meet), and friends watch through a link, right in the browser.
 
-- Sem servidor de vídeo e sem cota: o vídeo vai direto do navegador de quem apresenta para o de quem assiste.
-- Hospedagem 100% gratuita (Vercel + servidor público do PeerJS).
-- Feito para grupos pequenos (até umas 5 pessoas assistindo).
+- No media server and no quota: video goes straight from the presenter's browser to each viewer's browser.
+- 100% free hosting (Vercel + the public PeerJS server).
+- Made for small groups (up to about 5 viewers).
 
-## Como funciona
+> The website itself is in Brazilian Portuguese; the code, comments and docs are in English.
 
-```
-/live no Discord ──► Vercel (api/discord.js) ──► mensagem com o link "Assistir"
-                                                  + botão "Sou o apresentador" (link secreto)
-
-Apresentador (navegador) ──── vídeo direto (WebRTC) ────► cada espectador (navegador)
-         ▲                                                        ▲
-         └──────── servidor PeerJS: só apresenta um ao outro ─────┘
-```
-
-1. **Sinalização (PeerJS):** o apresentador se registra com o nome `letswatch-<código>`. Quem abre `/ver/<código>` sabe esse nome e pede para conectar. O servidor do PeerJS só faz a apresentação inicial.
-2. **STUN:** cada navegador descobre o próprio IP público (servidores gratuitos do Google).
-3. **Conexão direta:** os dois navegadores "furam" os roteadores e o vídeo passa a ir direto.
-4. **TURN:** se a rede de alguém for muito restrita e a conexão direta falhar, um servidor TURN repassa o vídeo. Veja [TURN](#turn-quando-o-espectador-não-consegue-conectar).
-
-O link de apresentador tem uma chave (`?k=...`) que é uma assinatura do código da sala com o `LETSWATCH_SECRET`. Assim não precisamos de banco de dados.
-
-## Estrutura
+## How it works
 
 ```
-api/                    Funções serverless (rodam na Vercel)
-  criar.js              POST /api/criar      cria uma sala pelo site
-  verificar.js          GET  /api/verificar  confere a chave do apresentador
-  config.js             GET  /api/config     servidores STUN/TURN e PeerJS
-  discord.js            POST /api/discord    recebe o /live e os botões do Discord
-lib/sala.js             Código compartilhado: gerar código, assinar a chave, montar links
-public/                 Site (HTML, CSS, JS)
-  index.html            Página inicial: criar sala sem Discord
-  transmitir.html       Painel do apresentador        → /transmitir/<código>?k=...
-  ver.html              Página de quem assiste       → /ver/<código>
-  js/host.js            Lógica do apresentador (tela, microfone, conexões)
-  js/viewer.js          Lógica do espectador (player, reconexão)
-  js/common.js          Funções usadas pelos dois
-  js/retro.js           Efeitos retrô: estática de TV e contador de fita
-  style.css             Visual TV de tubo + VHS
+/live on Discord ──► Vercel (api/discord.js) ──► message with the "Assistir" (watch) link
+                                                  + "Sou o apresentador" button (secret link)
+
+Presenter (browser) ──── direct video (WebRTC) ────► each viewer (browser)
+        ▲                                                   ▲
+        └──────── PeerJS server: only introduces them ──────┘
+```
+
+1. **Signaling (PeerJS):** the presenter registers as `letswatch-<code>`. Anyone opening `/ver/<code>` knows that name and asks to connect. The PeerJS server only handles that first introduction.
+2. **STUN:** each browser discovers its own public IP (free Google servers).
+3. **Direct connection:** both browsers punch through their routers and the video starts flowing directly.
+4. **TURN:** if someone's network is too restrictive and the direct connection fails, a TURN server relays the video. See [TURN](#turn-when-a-viewer-cant-connect).
+
+The presenter link carries a key (`?k=...`): an HMAC signature of the room code made with `LETSWATCH_SECRET`. That's why there is no database.
+
+## Project layout
+
+```
+api/                      Serverless functions (run on Vercel)
+  create.js               POST /api/create   creates a room from the website
+  verify.js               GET  /api/verify   checks the presenter key or an admin token
+  admin.js                POST /api/admin    checks the admin password, returns a room token
+  config.js               GET  /api/config   STUN/TURN and PeerJS servers
+  discord.js              POST /api/discord  handles /live and the Discord buttons
+lib/room.js               Shared code: room codes, signed keys, links
+public/                   Website (HTML, CSS, JS)
+  index.html              Home page: create a room without Discord
+  present.html            Presenter panel         → /transmitir/<code>?k=...
+  watch.html              Viewer page             → /ver/<code>
+  admin.html              End any live            → /admin
+  turn.html               Save your own TURN      → /turn
+  js/host.js              Presenter logic (screen sharing, connections, idle timers)
+  js/viewer.js            Viewer logic (player, reconnection, reactions)
+  js/admin.js             Admin page logic
+  js/turn.js              TURN page logic (test and save in the browser)
+  js/home.js              Home page logic
+  js/common.js            Helpers shared by the pages
+  js/retro.js             Retro effects: TV static and tape counter
+  style.css               CRT TV + VHS look
 scripts/
-  dev.js                Servidor local para testes (npm run dev)
-  registrar-comando.js  Registra o /live no Discord (npm run registrar-comando)
-vercel.json             Rotas /ver/... e /transmitir/...
+  dev.js                  Local server for testing (npm run dev)
+  register-command.js     Registers /live on Discord (npm run register-command)
+vercel.json               Routes /ver/..., /transmitir/..., /admin and /turn
 ```
 
-Não há dependências para instalar: tudo usa só o Node.js e o navegador. O PeerJS é carregado direto do CDN nas páginas.
+There are no dependencies to install: everything uses plain Node.js and the browser. PeerJS is loaded from a CDN in the pages.
 
-## Rodar no seu computador
+## Run it locally
 
-Precisa do [Node.js](https://nodejs.org) 20.12 ou mais novo.
+You need [Node.js](https://nodejs.org) 20.12 or newer.
 
 ```bash
 npm run dev
 ```
 
-Abra http://localhost:3000, crie uma sala, abra o painel e, em outra aba (ou janela anônima), o link de assistir. Para testar com amigos em outros computadores, publique na Vercel (abaixo): compartilhar tela só funciona em `localhost` ou em `https`.
+Open http://localhost:3000, create a room, open the panel and, in another tab (or a private window), the watch link. To test with friends on other computers, deploy to Vercel (below): screen sharing only works on `localhost` or `https`.
 
-## Colocar no ar (grátis)
+## Deploy (free)
 
-### 1. Enviar para o GitHub
-
-Na pasta do projeto:
+### 1. Push to GitHub
 
 ```bash
 git init
 git add .
-git commit -m "Primeira versão do LetsWatch"
+git commit -m "First version of LetsWatch"
 git branch -M main
 git remote add origin https://github.com/LetMarq/lets-watch.git
 git push -u origin main
 ```
 
-### 2. Publicar na Vercel
+### 2. Publish on Vercel
 
-1. Entre em https://vercel.com com a sua conta do GitHub.
-2. **Add New → Project** e escolha `lets-watch`.
-3. Em **Framework Preset**, deixe **Other**. Não precisa de comando de build.
-4. Em **Environment Variables**, adicione `LETSWATCH_SECRET` com um texto aleatório. Para gerar um:
+1. Sign in at https://vercel.com with your GitHub account.
+2. **Add New → Project** and pick `lets-watch`.
+3. Leave **Framework Preset** as **Other**. No build command is needed.
+4. Under **Environment Variables**, add `LETSWATCH_SECRET` with a random string. To generate one:
    ```bash
    node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
    ```
-5. Clique em **Deploy**. Você ganha um endereço como `https://lets-watch.vercel.app`.
+5. Click **Deploy**. You get an address like `https://lets-watch.vercel.app`.
 
-Pronto: o site já funciona sem o Discord. Cada `git push` publica uma nova versão automaticamente.
+The website already works without Discord. Every `git push` deploys a new version automatically.
 
-### 3. Criar o bot no Discord
+### 3. Create the Discord bot
 
-1. Acesse https://discord.com/developers/applications e clique em **New Application**. Dê o nome `LetsWatch`.
-2. Em **General Information**, copie o **Application ID** e a **Public Key**.
-3. Em **Bot**, clique em **Reset Token** e copie o token. Ele é só para registrar o comando; não vai para a Vercel.
-4. Na Vercel, adicione as variáveis `DISCORD_APP_ID` e `DISCORD_PUBLIC_KEY` e faça um novo deploy (**Deployments → ⋯ → Redeploy**).
-5. De volta ao Discord, em **General Information → Interactions Endpoint URL**, coloque:
+1. Go to https://discord.com/developers/applications and click **New Application**. Name it `LetsWatch`.
+2. Under **General Information**, copy the **Application ID** and the **Public Key**.
+3. Under **Bot**, click **Reset Token** and copy the token. It's only used to register the command and must **not** go to Vercel.
+4. On Vercel, add `DISCORD_APP_ID` and `DISCORD_PUBLIC_KEY`, then redeploy (**Deployments → ⋯ → Redeploy**).
+5. Back on Discord, under **General Information → Interactions Endpoint URL**, enter:
    ```
-   https://SEU-PROJETO.vercel.app/api/discord
+   https://YOUR-PROJECT.vercel.app/api/discord
    ```
-   e salve. O Discord testa a URL na hora; se der erro, confira a `DISCORD_PUBLIC_KEY` e se fez o redeploy.
+   and save. Discord tests the URL right away; if it fails, check `DISCORD_PUBLIC_KEY` and that you redeployed.
 
-### 4. Registrar o `/live` e convidar o bot
+### 4. Register `/live` and invite the bot
 
-No seu computador, copie `.env.example` para `.env`, preencha `DISCORD_APP_ID` e `DISCORD_BOT_TOKEN` e rode:
+On your computer, copy `.env.example` to `.env`, fill in `DISCORD_APP_ID` and `DISCORD_BOT_TOKEN`, and run:
 
 ```bash
-npm run registrar-comando
+npm run register-command
 ```
 
-O script mostra um link de convite. Abra, escolha o seu servidor e autorize. Agora é só digitar `/live` (ou `/live titulo: Maratona de filmes`).
+The script prints an invite link. Open it, pick your server and authorize. Now type `/live` (or `/live titulo: Movie night`).
 
-> O arquivo `.env` está no `.gitignore` e nunca deve ir para o GitHub. Se o token vazar, clique em **Reset Token** de novo.
+> `.env` is in `.gitignore` and must never go to GitHub. If the token leaks, click **Reset Token** again.
 
-## Usando
+The bot has no gateway connection (it only answers interactions through the endpoint), so it always shows as offline in the member list. That's expected.
 
-1. **`/live`** no Discord: o bot posta a mensagem com **Assistir** e **Sou o apresentador**.
-2. Quem criou clica em **Sou o apresentador** e recebe (só ela vê) o link do painel.
-3. No painel, **Apresentar tela**: o navegador abre a escolha de tela inteira, janela ou guia.
-4. Os outros clicam em **Assistir**. Quem abre antes do apresentador fica esperando e entra sozinho quando a live começar.
+## Usage
 
-No painel dá para **trocar de tela** sem derrubar ninguém, ligar o **microfone** (ou outra entrada de som), mudar a **qualidade** (até 1080p a 60 FPS nas opções de jogo) e ver **quantas pessoas estão assistindo**.
+1. **`/live`** on Discord: the bot posts a message with **Assistir** (watch) and **Sou o apresentador** (I'm the presenter).
+2. Whoever created it clicks **Sou o apresentador** and gets the panel link (only they can see it).
+3. In the panel, **Apresentar tela**: the browser opens the entire screen / window / tab picker.
+4. Everyone else clicks **Assistir**. People who arrive before the presenter wait and join automatically when the live starts.
 
-**Reações:** quem assiste pode mandar emojis (👍 ❤️ 😂 😮 👏 🔥 🎉 😢) pelo botão 😀. Eles sobem flutuando na tela de todo mundo e no monitor do painel. O apresentador pode desligar na chave **Reações**. Só os emojis da lista são aceitos, e cada pessoa pode mandar no máximo 6 a cada 3 segundos. Em tela cheia, os emojis não aparecem.
+In the panel you can **switch screens** without dropping anyone, change the **quality** (Texto 1080p/15 fps, Fluido 720p/30 fps, Filme 1080p/30 fps) and see **how many people are watching**.
 
-**Economia automática:** se ninguém assistir por 5 minutos, o compartilhamento de tela pausa sozinho. Se a sala ficar 30 minutos sem compartilhar e sem ninguém, ela fecha e desconecta do servidor. Na página de assistir há som, preencher a tela, picture-in-picture e tela cheia (atalhos **F** e **M**).
+**Reactions:** viewers can send emojis (👍 ❤️ 😂 😮 👏 🔥 🎉 😢) with the 😀 button. They float up on everyone's screen and on the panel's monitor. The presenter can turn them off with the **Reações** switch. Only emojis from the list are accepted, at most 6 every 3 seconds per person. They are hidden in fullscreen.
 
-### Limitações
+**Saving resources:** if nobody watches for 5 minutes, screen sharing pauses by itself. If the room stays 30 minutes without sharing and without viewers, it closes and disconnects from the signaling server.
 
-- **Apresentar só no computador** (Chrome, Edge ou Firefox). Assistir funciona em qualquer aparelho.
-- **Som do computador:** ao compartilhar uma **guia**, o som vai junto. Na **tela inteira**, marque "Compartilhar áudio do sistema" na janela de escolha (Chrome/Edge no Windows). **Janelas de programas e jogos** vão sem som: compartilhe a tela inteira com o áudio do sistema, ou escolha "Mixagem estéreo" em **Entrada de som** no painel.
-- **60 FPS:** as opções de jogo pedem bastante upload (cerca de 5 a 7 Mbps por pessoa assistindo) e gastam mais cota do TURN.
-- **Upload do apresentador:** ele envia uma cópia para cada espectador. Com 3 pessoas assistindo em 1080p, são uns 6 a 8 Mbps de upload.
-- **Privacidade:** por ser direto, as pessoas da live podem ver o IP público umas das outras. Entre amigos, tudo bem.
-- **Servidor público do PeerJS:** é gratuito e não tem garantia. Se um dia ficar instável, dá para hospedar o seu (variáveis `PEER_*`).
+The watch page has sound, fill screen, picture-in-picture, fullscreen (shortcuts **F** and **M**) and an optional CRT effect (off by default).
 
-## Som de jogos (ex.: League of Legends)
+### Limitations
 
-**Chrome 141 ou mais novo (melhor no Windows 11):** ao escolher uma **janela**, o seletor passa a oferecer áudio. No painel, em **Som ao compartilhar janela**, escolha **Só da janela** (só o som do jogo, sem o Discord) ou **Todo o PC**, antes de clicar em Apresentar tela. Se a opção de áudio não aparecer no seletor com "Só da janela", troque para "Todo o PC" e tente de novo.
+- **Presenting only works on a computer** (Chrome, Edge or Firefox). Watching works on any device.
+- **Computer sound:** sharing a **tab** sends its sound. For the **entire screen**, tick "Share system audio" in the picker (Chrome/Edge on Windows); this sends all PC sound, including Discord calls. **Windows of apps and games** are shared without sound: to stream a game with sound, share the entire screen with system audio.
+- **Presenter upload:** one copy is sent to each viewer. With 3 viewers at 1080p, that's about 6 to 8 Mbps of upload.
+- **Privacy:** since it's direct, people in the live can see each other's public IP. Fine among friends.
+- **Public PeerJS server:** free and without guarantees. If it becomes unstable, host your own (`PEER_*` variables).
 
-Em navegadores mais antigos, ao compartilhar só a **janela** de um jogo, o navegador não envia o som dela. Nesse caso existem duas saídas:
+## Admin: end any live
 
-**Mais simples: compartilhar a tela inteira.** Na janela de escolha, escolha **Tela inteira** e marque **"Compartilhar áudio do sistema"** (Chrome ou Edge no Windows). Vai todo o som do PC, inclusive o de chamadas no Discord. Se você estiver numa chamada, os espectadores também ouvem as vozes.
+1. On Vercel, add `ADMIN_PASSWORD` with a long password only you know, then redeploy.
+2. Open `https://YOUR-SITE/admin`, enter the password and paste the watch link (or just the 8-character code shown in the bot message footer: "Fita AbC23xYz").
+3. Click **Encerrar live**. The presenter panel and every viewer see that the live was ended by the administrator.
 
-**Só o som do jogo: cabo de áudio virtual (VB-Cable, grátis).**
+How it works: the server checks the password and returns a signed token valid only for that room. The admin page sends the token to the presenter panel, which checks it with the server before ending. The password never leaves the server.
 
-1. Baixe o **VB-CABLE Driver** em https://vb-audio.com/Cable/, extraia o zip, clique com o botão direito em `VBCABLE_Setup_x64.exe` → **Executar como administrador** → **Install Driver**, e reinicie o PC.
-2. Abra o jogo. No Windows 11, vá em **Configurações → Sistema → Som → Mixer de volume** (no Windows 10: **Volume do aplicativo e preferências de dispositivo**). Em **League of Legends**, troque a **saída** para **CABLE Input**. O League tem dois programas, o cliente e o jogo, então troque nos dois.
-3. Para você continuar ouvindo o jogo: aperte `Win + R`, digite `mmsys.cpl` → aba **Gravação** → **CABLE Output** → **Propriedades** → aba **Escutar** → marque **"Escutar este dispositivo"** e escolha o seu fone ou caixa de som.
-4. No painel do LetsWatch, em **Entrada de som**, escolha **CABLE Output** e ligue a chave **Microfone / som extra**. Agora pode compartilhar só a janela do jogo: o som vai junto, sem as vozes do Discord.
+Limitation: since rooms aren't stored in a database, anyone with the presenter link can reopen the room by reloading the panel. Blocking it for good would need a list of banned rooms (e.g. in Vercel KV).
 
-Por enquanto o painel usa uma entrada de som por vez. Com o CABLE Output escolhido, o seu microfone não vai junto.
+## TURN: when a viewer can't connect
 
-## Admin: encerrar qualquer live
+If the panel shows **0 viewers** while someone has the link open, or the viewer sees **"Sem conexão direta"**, someone's network blocked the direct connection. This is common on carrier internet with shared IPs (CGNAT), 4G/5G, corporate and university networks. The fix is a **TURN** server, which relays the video only for whoever can't connect directly.
 
-1. Na Vercel, cadastre a variável `ADMIN_PASSWORD` com uma senha longa, que só você sabe, e faça o Redeploy.
-2. Abra `https://SEU-SITE/admin`, digite a senha e cole o link de assistir (ou só o código de 8 letras, que aparece no rodapé da mensagem do bot: "Fita AbC23xYz").
-3. Clique em **Encerrar live**. O painel do apresentador e todos os espectadores veem que a live foi encerrada pelo administrador.
+### Everyone can use their own TURN (/turn page)
 
-Como funciona: o servidor confere a senha e devolve uma autorização assinada, válida só para aquela sala. A página de admin envia essa autorização ao painel do apresentador, que confere com o servidor antes de encerrar. A senha nunca sai do servidor.
+At `https://YOUR-SITE/turn`, anyone can save their own TURN, e.g. a free [ExpressTURN](https://www.expressturn.com/) account. The page tests the server before saving. It's stored **only in that browser** (localStorage) and goes **first** in the list: Chrome prefers the TURN servers at the top, and the site's servers stay as a fallback. Only one side of the live needs a working TURN, so usually only whoever is on 4G/5G needs to set one up.
 
-Limitação: como as salas não ficam guardadas em banco de dados, quem tem o link de apresentador consegue reabrir a sala recarregando o painel. Para bloquear de vez, seria preciso guardar uma lista de salas banidas (por exemplo, no Vercel KV).
+### Several accounts on the site
 
-## TURN: quando o espectador não consegue conectar
+Besides `TURN_URL`/`TURN_USERNAME`/`TURN_CREDENTIAL`, you can add up to 4 more accounts on Vercel: `TURN_URL_2`, `TURN_USERNAME_2`, `TURN_CREDENTIAL_2` and so on, up to `_5`. All of them are offered at once: if one runs out of quota, the others keep working. Only add the numbered variables you actually use (Vercel doesn't accept empty values).
 
-Se o painel mostra **0 pessoas assistindo** mesmo com alguém no link, ou o espectador vê **"Sem conexão direta"**, a rede de alguém bloqueou a conexão direta. Isso é comum em internet de operadora com IP compartilhado, 4G, empresa e faculdade. A solução é um servidor **TURN**, que repassa o vídeo só para quem não consegue conectar direto.
+### Default: Open Relay (free, no sign-up)
 
-### Cada pessoa pode usar o próprio TURN (página /turn)
+If no TURN is configured, the site automatically uses the free public [Open Relay](https://www.metered.ca/tools/openrelay/) server by Metered. No account, card or Vercel variable needed. Being public and shared, it has no guarantees; if it stops working, use one of the options below. To turn it off, set `TURN_OPENRELAY=false`.
 
-Em `https://SEU-SITE/turn`, qualquer pessoa cadastra um TURN dela, por exemplo uma conta grátis na [ExpressTURN](https://www.expressturn.com/). A página testa o servidor antes de salvar. Ele fica salvo **só naquele navegador** (localStorage) e entra **primeiro** na lista: o Chrome dá mais prioridade aos TURNs do começo da lista, e os do site ficam de reserva. Basta um dos lados da live ter um TURN funcionando, então normalmente só quem está no 4G/5G precisa cadastrar.
+### ExpressTURN (1,000 GB free per month, fixed username and password)
 
-### Várias contas no site
+Create an account at https://www.expressturn.com and add `TURN_URL` (e.g. `turn:free.expressturn.com:3478`), `TURN_USERNAME` and `TURN_CREDENTIAL` on Vercel with the data from their dashboard. Then redeploy.
 
-Além de `TURN_URL`/`TURN_USERNAME`/`TURN_CREDENTIAL`, dá para cadastrar até mais 4 contas na Vercel: `TURN_URL_2`, `TURN_USERNAME_2`, `TURN_CREDENTIAL_2` e assim por diante, até `_5`. Todas são oferecidas ao mesmo tempo: se a cota de uma acabar, as outras continuam funcionando.
+### Cloudflare (1,000 GB free per month, requires a card)
 
-### Padrão: Open Relay (grátis, sem cadastro)
-
-Se você não configurar nenhum TURN, o site usa sozinho o servidor público e gratuito do [Open Relay](https://www.metered.ca/tools/openrelay/), da Metered. Não precisa de conta, cartão nem variável na Vercel. Por ser um servidor público e compartilhado, ele não tem garantia: se um dia parar de funcionar, use uma das opções abaixo.
-
-### Cloudflare (1.000 GB grátis por mês, pede cartão)
-
-1. Crie uma conta grátis em https://dash.cloudflare.com.
-2. No menu, abra **Realtime** (em algumas contas aparece como **Calls**) → **TURN Server** → **Create**.
-3. Dê um nome (ex.: `letswatch`) e crie. A Cloudflare mostra o **Turn Token ID** e o **API Token**. Copie os dois na hora, porque o token só aparece uma vez.
-4. Na Vercel, em **Settings → Environment Variables**, adicione:
+1. Create a free account at https://dash.cloudflare.com.
+2. Open **Realtime** (shown as **Calls** on some accounts) → **TURN Server** → **Create**.
+3. Give it a name (e.g. `letswatch`). Cloudflare shows the **Turn Token ID** and the **API Token**. Copy both right away: the token is only shown once.
+4. On Vercel, under **Settings → Environment Variables**, add:
    ```
-   CF_TURN_KEY_ID=o Turn Token ID
-   CF_TURN_API_TOKEN=o API Token
+   CF_TURN_KEY_ID=the Turn Token ID
+   CF_TURN_API_TOKEN=the API Token
    ```
-5. Faça **Deployments → ⋯ → Redeploy**.
+5. Redeploy.
 
-O site gera uma senha temporária do TURN para cada pessoa que abre a página, então o token da Cloudflare nunca vai para o navegador.
+The site generates a temporary TURN credential for each visitor, so the Cloudflare token never reaches the browser.
 
-### ExpressTURN (1.000 GB grátis por mês, usuário e senha fixos)
+### Metered with your own account
 
-Crie a conta em https://expressturn.com e cadastre na Vercel `TURN_URL` (ex.: `turn:relay1.expressturn.com:3478`), `TURN_USERNAME` e `TURN_CREDENTIAL` com os dados do painel. Depois, faça o Redeploy.
+Create an account at https://dashboard.metered.ca/signup?tool=turnserver, copy the credentials URL (`https://YOUR-APP.metered.live/api/v1/turn/credentials?apiKey=...`) and add it on Vercel as `METERED_TURN_URL`. Then redeploy.
 
-### Metered com conta própria
+TURN priority: Cloudflare > Metered > `TURN_URL` > Open Relay. Extra `TURN_URL_2..5` accounts are always added on top.
 
-Crie uma conta em https://dashboard.metered.ca/signup?tool=turnserver, copie a URL de credenciais (formato `https://SEU-APP.metered.live/api/v1/turn/credentials?apiKey=...`) e cadastre na Vercel como `METERED_TURN_URL`. Depois, faça o Redeploy.
+## Ideas for later
 
-## Ideias para depois
-
-- Chat na página de assistir (a conexão de dados P2P já existe).
-- Câmera do apresentador num cantinho.
-- Avisar no Discord quando a live começar e terminar.
-- Trocar para um servidor de mídia (LiveKit) se o grupo crescer além de umas 5 pessoas.
+- Chat on the watch page (the P2P data connection already exists).
+- Presenter webcam in a corner.
+- Notify Discord when the live starts and ends.
+- Move to a media server (LiveKit) if the group grows beyond about 5 people.

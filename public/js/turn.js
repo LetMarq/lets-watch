@@ -1,56 +1,56 @@
-// Página /turn: cada pessoa cadastra um TURN próprio neste navegador.
-// Ele fica no localStorage e é colocado PRIMEIRO na lista de servidores
-// (veja carregarConfig em common.js). O Chrome dá mais prioridade aos TURNs
-// que vêm antes na lista; o do site fica de reserva.
-import { salvarTurnsDoNavegador, turnsDoNavegador } from './common.js';
+// /turn page: anyone can save their own TURN in this browser.
+// It lives in localStorage and is put FIRST in the server list (see
+// loadConfig in common.js). Chrome gives more priority to the TURN servers
+// that come first in the list; the site's one stays as a fallback.
+import { browserTurns, saveBrowserTurns } from './common.js';
 
-const LIMITE_TESTE = 8000;
+const TEST_TIMEOUT_MS = 8000;
 
 const $ = (id) => document.getElementById(id);
-const visor = $('visor');
-const form = $('form-turn');
-const botaoSalvar = $('salvar');
+const display = $('display');
+const form = $('turn-form');
+const saveBtn = $('save');
 
-function mostrar(texto, tipo = '') {
-  visor.textContent = texto;
-  visor.dataset.tipo = tipo;
+function show(text, state = '') {
+  display.textContent = text;
+  display.dataset.state = state;
 }
 
-// "turn:free.expressturn.com:3478" ou "free.expressturn.com" → "free.expressturn.com:3478"
-function limparEndereco(texto) {
-  let endereco = texto.trim().replace(/^turns?:/i, '').replace(/\?.*$/, '').replace(/\/+$/, '');
-  if (!/:\d+$/.test(endereco)) endereco += ':3478';
-  return endereco;
+// "turn:free.expressturn.com:3478" or "free.expressturn.com" → "free.expressturn.com:3478"
+function cleanAddress(text) {
+  let address = text.trim().replace(/^turns?:/i, '').replace(/\?.*$/, '').replace(/\/+$/, '');
+  if (!/:\d+$/.test(address)) address += ':3478';
+  return address;
 }
 
-function montarServidor(endereco, usuario, senha) {
+function buildServer(address, username, password) {
   return {
-    urls: [`turn:${endereco}`, `turn:${endereco}?transport=tcp`],
-    username: usuario.trim(),
-    credential: senha.trim(),
+    urls: [`turn:${address}`, `turn:${address}?transport=tcp`],
+    username: username.trim(),
+    credential: password.trim(),
   };
 }
 
-// Testa o TURN de verdade: pede ao navegador um caminho SÓ pelo TURN ("relay").
-// Se aparecer um candidato do tipo relay, usuário, senha e cota estão ok.
-async function testar(servidor) {
-  const pc = new RTCPeerConnection({ iceServers: [servidor], iceTransportPolicy: 'relay' });
+// Really tests the TURN: asks the browser for a path ONLY through the TURN
+// ("relay"). If a relay candidate shows up, username, password and quota are fine.
+async function testServer(server) {
+  const pc = new RTCPeerConnection({ iceServers: [server], iceTransportPolicy: 'relay' });
   try {
-    pc.createDataChannel('teste');
-    const resultado = new Promise((resolve) => {
-      const limite = setTimeout(() => resolve(false), LIMITE_TESTE);
-      pc.addEventListener('icecandidate', (evento) => {
-        if (evento.candidate && / typ relay /.test(evento.candidate.candidate)) {
-          clearTimeout(limite);
+    pc.createDataChannel('test');
+    const result = new Promise((resolve) => {
+      const timeout = setTimeout(() => resolve(false), TEST_TIMEOUT_MS);
+      pc.addEventListener('icecandidate', (event) => {
+        if (event.candidate && / typ relay /.test(event.candidate.candidate)) {
+          clearTimeout(timeout);
           resolve(true);
-        } else if (!evento.candidate) {
-          clearTimeout(limite);
-          resolve(false); // terminou de procurar sem achar caminho pelo TURN
+        } else if (!event.candidate) {
+          clearTimeout(timeout);
+          resolve(false); // finished searching without finding a path through the TURN
         }
       });
     });
     await pc.setLocalDescription(await pc.createOffer());
-    return await resultado;
+    return await result;
   } catch {
     return false;
   } finally {
@@ -58,56 +58,56 @@ async function testar(servidor) {
   }
 }
 
-function atualizarTela() {
-  const [salvo] = turnsDoNavegador();
-  $('salvo').classList.toggle('escondido', !salvo);
-  $('titulo-form').textContent = salvo ? 'Trocar por outro TURN' : 'Cadastrar um TURN';
-  if (salvo) {
-    $('salvo-servidor').textContent = String(salvo.urls?.[0] ?? '').replace(/^turn:/, '');
-    $('salvo-usuario').textContent = `usuário ${salvo.username}`;
-    mostrar('Usando o SEU TURN primeiro', 'ok');
+function render() {
+  const [saved] = browserTurns();
+  $('saved').classList.toggle('hidden', !saved);
+  $('form-title').textContent = saved ? 'Trocar por outro TURN' : 'Cadastrar um TURN';
+  if (saved) {
+    $('saved-server').textContent = String(saved.urls?.[0] ?? '').replace(/^turn:/, '');
+    $('saved-user').textContent = `usuário ${saved.username}`;
+    show('Usando o SEU TURN primeiro', 'ok');
   } else {
-    mostrar('Usando o TURN do site');
+    show('Usando o TURN do site');
   }
 }
 
-form.addEventListener('submit', async (evento) => {
-  evento.preventDefault();
-  const servidor = montarServidor(limparEndereco($('servidor').value), $('usuario').value, $('senha').value);
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const server = buildServer(cleanAddress($('server').value), $('username').value, $('password').value);
 
-  botaoSalvar.disabled = true;
-  mostrar('Testando...');
-  const funciona = await testar(servidor);
-  botaoSalvar.disabled = false;
+  saveBtn.disabled = true;
+  show('Testando...');
+  const works = await testServer(server);
+  saveBtn.disabled = false;
 
-  if (!funciona) {
-    mostrar('Não funcionou. Confira usuário e senha (ou a cota acabou).', 'erro');
+  if (!works) {
+    show('Não funcionou. Confira usuário e senha (ou a cota acabou).', 'error');
     return;
   }
-  if (!salvarTurnsDoNavegador([servidor])) {
-    mostrar('Funciona, mas este navegador não deixou salvar (janela anônima?).', 'erro');
+  if (!saveBrowserTurns([server])) {
+    show('Funciona, mas este navegador não deixou salvar (janela anônima?).', 'error');
     return;
   }
   form.reset();
-  atualizarTela();
-  mostrar('Funcionando! Salvo neste navegador.', 'ok');
+  render();
+  show('Funcionando! Salvo neste navegador.', 'ok');
 });
 
-$('testar-salvo').addEventListener('click', async () => {
-  const [salvo] = turnsDoNavegador();
-  if (!salvo) return;
-  mostrar('Testando...');
-  const funciona = await testar(salvo);
-  mostrar(
-    funciona ? 'Seu TURN está funcionando.' : 'Seu TURN não respondeu (cota acabou ou senha mudou?).',
-    funciona ? 'ok' : 'erro',
+$('test-saved').addEventListener('click', async () => {
+  const [saved] = browserTurns();
+  if (!saved) return;
+  show('Testando...');
+  const works = await testServer(saved);
+  show(
+    works ? 'Seu TURN está funcionando.' : 'Seu TURN não respondeu (cota acabou ou senha mudou?).',
+    works ? 'ok' : 'error',
   );
 });
 
-$('remover').addEventListener('click', () => {
-  salvarTurnsDoNavegador([]);
-  atualizarTela();
-  mostrar('Removido. Usando o TURN do site.');
+$('remove').addEventListener('click', () => {
+  saveBrowserTurns([]);
+  render();
+  show('Removido. Usando o TURN do site.');
 });
 
-atualizarTela();
+render();

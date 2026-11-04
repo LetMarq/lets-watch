@@ -14,7 +14,7 @@ try {
 
 if (!process.env.LETSWATCH_SECRET) {
   process.env.LETSWATCH_SECRET = 'local-testing-only-secret';
-  console.warn('Aviso: LETSWATCH_SECRET vazio. Usando um segredo de teste.');
+  console.warn('Warning: LETSWATCH_SECRET is empty. Using a test secret.');
 }
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -52,12 +52,12 @@ async function runApi(req, res, name) {
   try {
     module = await import(pathToFileURL(file).href);
   } catch {
-    res.writeHead(404).end('Rota não encontrada');
+    res.writeHead(404).end('Route not found');
     return;
   }
   const handler = module[req.method];
   if (!handler) {
-    res.writeHead(405).end('Método não permitido');
+    res.writeHead(405).end('Method not allowed');
     return;
   }
   const body = ['GET', 'HEAD'].includes(req.method) ? undefined : await readBody(req);
@@ -82,7 +82,7 @@ async function serveFile(res, relativePath) {
     res.writeHead(200, { 'content-type': CONTENT_TYPES[path.extname(target)] ?? 'application/octet-stream' });
     res.end(content);
   } catch {
-    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('Página não encontrada');
+    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('Page not found');
   }
 }
 
@@ -97,9 +97,9 @@ http
       return await serveFile(res, decodeURIComponent(pathname));
     } catch (error) {
       console.error(error);
-      res.writeHead(500).end('Erro interno');
+      res.writeHead(500).end('Internal error');
     }
   })
   .listen(port, () => {
-    console.log(`LetsWatch rodando em http://localhost:${port}`);
+    console.log(`LetsWatch running at http://localhost:${port}`);
   });

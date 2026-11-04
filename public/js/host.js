@@ -22,8 +22,6 @@ const QUALITY_PRESETS = {
   text: { width: 1920, height: 1080, fps: 15, hint: 'detail', bitrate: 2_500_000, label: '1080p, 15 fps · slides, código, documentos' },
   smooth: { width: 1280, height: 720, fps: 30, hint: 'motion', bitrate: 2_500_000, label: '720p, 30 fps · usa menos internet' },
   movie: { width: 1920, height: 1080, fps: 30, hint: 'motion', bitrate: 4_500_000, label: '1080p, 30 fps · precisa de mais upload' },
-  game: { width: 1280, height: 720, fps: 60, hint: 'motion', bitrate: 4_500_000, label: '720p, 60 fps · jogos, ~5 Mbps de upload por pessoa' },
-  gameHd: { width: 1920, height: 1080, fps: 60, hint: 'motion', bitrate: 7_000_000, label: '1080p, 60 fps · jogos, ~7 Mbps de upload por pessoa' },
 };
 
 // Saving resources: with nobody watching, sharing pauses by itself and, after
@@ -35,9 +33,6 @@ const WARN_BEFORE_CLOSE_MS = 2 * 60_000;
 // Max reactions per viewer: 6 every 3 seconds.
 const REACTION_LIMIT = 6;
 const REACTION_WINDOW_MS = 3000;
-
-// Audio inputs that capture computer sound (not voice): no voice filters.
-const COMPUTER_AUDIO_INPUT = /mix|est[eé]reo|stereo|cable|virtual|voicemeeter|loopback/i;
 
 const $ = (id) => document.getElementById(id);
 const el = {
@@ -51,7 +46,6 @@ const el = {
   switchScreen: $('switch-screen'),
   stop: $('stop'),
   endLive: $('end-live'),
-  mic: $('mic'),
   quality: $('quality'),
   qualityHint: $('quality-hint'),
   viewerCount: $('viewer-count'),
@@ -64,8 +58,6 @@ const el = {
   led: $('led'),
   idleNotice: $('idle-notice'),
   noAudioNotice: $('no-audio-notice'),
-  audioInput: $('audio-input'),
-  windowAudio: $('window-audio'),
   reactionsEnabled: $('reactions-enabled'),
   reactionsLayer: $('reactions'),
 };
@@ -90,7 +82,7 @@ const viewers = new Map();
 let peer = null;
 let currentScreen = null; // MediaStream from getDisplayMedia
 let outgoingStream = null; // MediaStream sent to viewers (screen video + audio)
-let audio = null; // { context, destination, screenSource, micSource, mic }
+let silentTrack = null; // used while the shared screen has no audio
 let ended = false;
 
 // ---------- Message screens ----------
@@ -268,29 +260,23 @@ function handleConnection(conn) {
 }
 
 // ---------- Audio ----------
-// We always send ONE audio track, swapped depending on the situation:
-// - mic off: the screen audio goes DIRECTLY, without the mixer. This is the
-//   most reliable option when the panel is in the background (e.g. while
-//   sharing another tab);
-// - mic on: the mix (screen + mic) made by the mixer;
-// - no audio at all: silence, just to keep the track so sound can be turned on later.
-// Swapping uses replaceTrack, so nobody needs to reconnect.
+// The sound that comes with the shared screen goes straight to viewers.
+// If the screen has no sound, we send a silent track instead, so that sound
+// can show up later (e.g. after "Trocar tela") without reconnecting anyone.
 
-function setupAudio() {
-  if (audio) return audio;
-  const context = new AudioContext();
-  const destination = context.createMediaStreamDestination();
-  audio = { context, destination, screenSource: null, micSource: null, mic: null };
-  return audio;
+function getSilentTrack() {
+  if (!silentTrack) {
+    const context = new AudioContext();
+    silentTrack = context.createMediaStreamDestination().stream.getAudioTracks()[0];
+  }
+  return silentTrack;
 }
 
 function outgoingAudioTrack() {
-  const screenTrack = currentScreen?.getAudioTracks()[0];
-  if (audio?.mic) return audio.destination.stream.getAudioTracks()[0];
-  if (screenTrack) return screenTrack;
-  return setupAudio().destination.stream.getAudioTracks()[0];
+  return currentScreen?.getAudioTracks()[0] ?? getSilentTrack();
 }
 
+// Swaps the audio track for everyone with replaceTrack (no reconnection).
 function updateOutgoingAudio() {
   if (!outgoingStream) return;
   const next = outgoingAudioTrack();
@@ -304,54 +290,6 @@ function updateOutgoingAudio() {
   }
 }
 
-function connectScreenAudio(screen) {
-  const a = setupAudio();
-  a.screenSource?.disconnect();
-  a.screenSource = null;
-  if (screen.getAudioTracks().length) {
-    a.screenSource = a.context.createMediaStreamSource(new MediaStream(screen.getAudioTracks()));
-    a.screenSource.connect(a.destination);
-  }
-}
-
-async function startMic() {
-  const a = setupAudio();
-  const option = el.audioInput.selectedOptions[0];
-  const isVoice = !COMPUTER_AUDIO_INPUT.test(option?.textContent ?? '');
-  try {
-    a.mic = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        ...(el.audioInput.value ? { deviceId: { exact: el.audioInput.value } } : {}),
-        // Voice: clean up noise and echo. Computer sound (e.g. Stereo Mix): no filters.
-        echoCancellation: isVoice,
-        noiseSuppression: isVoice,
-        autoGainControl: isVoice,
-      },
-    });
-  } catch (error) {
-    console.warn(error);
-    el.mic.checked = false;
-    alert('Não foi possível usar o microfone. Verifique a permissão do navegador.');
-    return;
-  }
-  a.micSource = a.context.createMediaStreamSource(a.mic);
-  a.micSource.connect(a.destination);
-  await a.context.resume();
-  updateOutgoingAudio();
-  updateNoAudioNotice();
-  listAudioInputs(); // with permission granted, input names become visible
-}
-
-function stopMic() {
-  if (!audio) return;
-  audio.micSource?.disconnect();
-  audio.mic?.getTracks().forEach((track) => track.stop());
-  audio.micSource = null;
-  audio.mic = null;
-  updateOutgoingAudio();
-  updateNoAudioNotice();
-}
-
 // ---------- Screen sharing ----------
 
 async function pickScreen() {
@@ -362,16 +300,8 @@ async function pickScreen() {
       height: { ideal: preset.height },
       frameRate: { ideal: preset.fps, max: preset.fps },
     },
-    audio: {
-      echoCancellation: false,
-      noiseSuppression: false,
-      autoGainControl: false,
-      restrictOwnAudio: true, // Chrome 141+: removes this page's own sound from the capture (avoids echo)
-    },
+    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
     systemAudio: 'include', // offers "system audio" when sharing the entire screen
-    // Chrome 141+: also offers audio when sharing a WINDOW.
-    // 'system' = all computer sound, 'window' = that window only, 'exclude' = no audio.
-    windowAudio: el.windowAudio.value,
     selfBrowserSurface: 'exclude', // hides this very tab from the list
     surfaceSwitching: 'include', // allows switching tabs from Chrome's sharing bar
   });
@@ -400,9 +330,6 @@ function showPreview(screen) {
 }
 
 async function startPresenting() {
-  setupAudio();
-  await audio.context.resume();
-
   let screen;
   try {
     screen = await pickScreen();
@@ -415,7 +342,6 @@ async function startPresenting() {
   }
 
   currentScreen = screen;
-  connectScreenAudio(screen);
   outgoingStream = new MediaStream([screen.getVideoTracks()[0], outgoingAudioTrack()]);
   onAirSince = Date.now();
   idleSince = Date.now();
@@ -439,7 +365,6 @@ async function switchScreen() {
   const newVideo = next.getVideoTracks()[0];
 
   currentScreen = next;
-  connectScreenAudio(next);
   outgoingStream.getVideoTracks().forEach((track) => outgoingStream.removeTrack(track));
   outgoingStream.addTrack(newVideo);
 
@@ -458,10 +383,6 @@ function stopPresenting() {
   currentScreen = null;
   outgoingStream = null;
   onAirSince = 0;
-  if (audio) {
-    audio.screenSource?.disconnect();
-    audio.screenSource = null;
-  }
   for (const viewer of viewers.values()) {
     viewer.call?.close();
     viewer.call = null;
@@ -497,7 +418,6 @@ function confirmEndLive() {
 
 function endRoom(title, text, reason = '') {
   stopPresenting();
-  stopMic();
   ended = true;
   broadcast({ type: 'ended', reason });
   // Give the message a moment to arrive before disconnecting.
@@ -560,38 +480,11 @@ setInterval(() => {
   }
 }, 1000);
 
-// ---------- "No audio" notice and audio input picker ----------
+// ---------- "No audio" notice ----------
 
 function updateNoAudioNotice() {
   const screenHasNoAudio = Boolean(currentScreen) && currentScreen.getAudioTracks().length === 0;
-  el.noAudioNotice.classList.toggle('hidden', !screenHasNoAudio || Boolean(audio?.mic));
-}
-
-async function listAudioInputs() {
-  if (!navigator.mediaDevices?.enumerateDevices) return;
-  const selected = el.audioInput.value;
-  const inputs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
-  el.audioInput.replaceChildren(new Option('Padrão do sistema', ''));
-  inputs
-    .filter((d) => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications')
-    .forEach((d, i) => el.audioInput.add(new Option(d.label || `Entrada ${i + 1}`, d.deviceId)));
-  if ([...el.audioInput.options].some((o) => o.value === selected)) el.audioInput.value = selected;
-}
-
-// The browser only shows audio input names after the page gets audio
-// permission. The first time the list is opened, we briefly ask for it so
-// names show up (e.g. "CABLE Output").
-let permissionRequested = false;
-async function revealAudioInputNames() {
-  if (permissionRequested || el.audioInput.options.length > 1) return;
-  permissionRequested = true;
-  try {
-    const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
-    probe.getTracks().forEach((track) => track.stop());
-  } catch {
-    // permission denied: the list keeps only "Padrão do sistema"
-  }
-  await listAudioInputs();
+  el.noAudioNotice.classList.toggle('hidden', !screenHasNoAudio);
 }
 
 // ---------- Signaling server connection ----------
@@ -677,20 +570,6 @@ el.endLive.addEventListener('click', confirmEndLive);
 el.quality.addEventListener('change', applyQuality);
 el.reactionsEnabled.addEventListener('change', () => broadcast(currentState()));
 el.copyLink.addEventListener('click', () => copyText(el.watchLink.value, el.copyLink));
-
-el.mic.addEventListener('change', () => {
-  if (el.mic.checked) startMic();
-  else stopMic();
-});
-el.audioInput.addEventListener('change', async () => {
-  if (!el.mic.checked) return;
-  stopMic();
-  await startMic(); // switches input without turning the switch off
-});
-el.audioInput.addEventListener('pointerdown', revealAudioInputNames);
-el.audioInput.addEventListener('focus', revealAudioInputNames);
-navigator.mediaDevices?.addEventListener?.('devicechange', listAudioInputs);
-listAudioInputs();
 
 let titleDebounce;
 el.title.addEventListener('input', () => {

@@ -9,7 +9,7 @@ try {
 
 const { DISCORD_APP_ID, DISCORD_BOT_TOKEN } = process.env;
 if (!DISCORD_APP_ID || !DISCORD_BOT_TOKEN) {
-  console.error('Preencha DISCORD_APP_ID e DISCORD_BOT_TOKEN no arquivo .env');
+  console.error('Fill in DISCORD_APP_ID and DISCORD_BOT_TOKEN in the .env file');
   process.exit(1);
 }
 
@@ -43,11 +43,11 @@ const response = await fetch(`https://discord.com/api/v10/applications/${DISCORD
 });
 
 if (!response.ok) {
-  console.error(`Erro ${response.status}:`, await response.text());
+  console.error(`Error ${response.status}:`, await response.text());
   process.exit(1);
 }
 
-console.log('Comando /live registrado com sucesso!');
+console.log('Command /live registered successfully!');
 console.log(
-  `Convide o bot para o seu servidor: https://discord.com/oauth2/authorize?client_id=${DISCORD_APP_ID}&scope=bot+applications.commands&permissions=0`,
+  `Invite the bot to your server: https://discord.com/oauth2/authorize?client_id=${DISCORD_APP_ID}&scope=bot+applications.commands&permissions=0`,
 );

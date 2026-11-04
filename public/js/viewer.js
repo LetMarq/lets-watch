@@ -1,410 +1,411 @@
-// Página de quem assiste.
+// Watch page.
 //
-// 1. Conecta no servidor do PeerJS com um ID aleatório.
-// 2. Abre uma conexão de dados com o apresentador ("letswatch-<codigo>").
-//    Se ele ainda não chegou, tenta de novo a cada poucos segundos.
-// 3. Quando o apresentador compartilha a tela, ele liga para cá e o vídeo
-//    aparece no <video>.
-import { REACOES, carregarConfig, codigoDaUrl, idDoApresentador, opcoesDoPeer, plural, soltarEmoji } from './common.js';
-import { criarEstatica } from './retro.js';
+// 1. Connects to the PeerJS server with a random id.
+// 2. Opens a data connection to the presenter ("letswatch-<code>").
+//    If they haven't arrived yet, tries again every few seconds.
+// 3. When the presenter shares the screen, they call here and the video
+//    shows up in the <video>.
+import { REACTIONS, codeFromUrl, launchEmoji, loadConfig, peerOptions, plural, presenterPeerId } from './common.js';
+import { createStatic } from './retro.js';
 
-const INTERVALO_TENTATIVA = 3000;
-// Chave nova: quem já tinha visitado com o CRT ligado por padrão também começa desligado.
-const CHAVE_CRT = 'letswatch-crt-v2';
+const RETRY_INTERVAL_MS = 3000;
+const CONNECT_TIMEOUT_MS = 12000;
+// New key: people who visited back when CRT was on by default also start with it off.
+const CRT_STORAGE_KEY = 'letswatch-crt-v2';
 
 const $ = (id) => document.getElementById(id);
 const el = {
-  palco: $('palco'),
+  stage: $('stage'),
   video: $('video'),
-  aviso: $('aviso'),
-  avisoCamada: $('aviso-camada'),
-  avisoTitulo: $('aviso-titulo'),
-  avisoTexto: $('aviso-texto'),
-  avisoLink: $('aviso-link'),
-  estaticaCanvas: $('estatica'),
-  estaticaBarra: $('estatica-barra'),
-  titulo: $('titulo'),
+  notice: $('notice'),
+  noticeLayer: $('notice-layer'),
+  noticeTitle: $('notice-title'),
+  noticeText: $('notice-text'),
+  noticeLink: $('notice-link'),
+  staticCanvas: $('static'),
+  staticBar: $('static-bar'),
+  title: $('title'),
   osdPlay: $('osd-play'),
-  seloAoVivo: $('selo-ao-vivo'),
-  espectadores: $('espectadores'),
-  ativarSom: $('ativar-som'),
-  botaoSom: $('botao-som'),
-  iconeMudo: $('icone-mudo'),
-  iconeSom: $('icone-som'),
-  botaoCrt: $('botao-crt'),
-  botaoPreencher: $('botao-preencher'),
-  botaoPip: $('botao-pip'),
-  botaoTelaCheia: $('botao-tela-cheia'),
-  camadaReacoes: $('reacoes'),
-  bandeja: $('bandeja-reacoes'),
-  botaoReacoes: $('botao-reacoes'),
+  liveBadge: $('live-badge'),
+  viewers: $('viewers'),
+  unmute: $('unmute'),
+  soundBtn: $('sound-btn'),
+  iconMuted: $('icon-muted'),
+  iconSound: $('icon-sound'),
+  crtBtn: $('crt-btn'),
+  fillBtn: $('fill-btn'),
+  pipBtn: $('pip-btn'),
+  fullscreenBtn: $('fullscreen-btn'),
+  reactionsLayer: $('reactions'),
+  tray: $('reactions-tray'),
+  reactionsBtn: $('reactions-btn'),
 };
 
-const codigo = codigoDaUrl();
-const idApresentador = codigo && idDoApresentador(codigo);
-const estatica = criarEstatica(el.estaticaCanvas);
+const code = codeFromUrl();
+const presenterId = code && presenterPeerId(code);
+const staticNoise = createStatic(el.staticCanvas);
 
 let peer = null;
-let conexao = null;
-let chamada = null;
-let tentativa = null;
-let encerrada = false;
-let temTurn = false;
-let reacoesPermitidas = false;
+let connection = null;
+let call = null;
+let retryTimer = null;
+let ended = false;
+let hasTurn = false;
+let reactionsAllowed = false;
 
-// ---------- Telas de espera ----------
-// 'estatica' = TV fora do ar (sem sinal / sintonizando)
-// 'azul'     = tela azul de videocassete (pausa, fim da fita, erro)
+// ---------- Waiting screens ----------
+// 'static' = TV off the air (no signal / tuning)
+// 'blue'   = VCR blue screen (paused, end of tape, error)
 
-function mostrarAviso(titulo, texto = '', tipo = 'estatica') {
-  el.aviso.classList.remove('escondido');
-  el.avisoTitulo.textContent = titulo;
-  el.avisoTexto.textContent = texto;
-  el.avisoLink.classList.add('escondido');
+function showNotice(title, text = '', kind = 'static') {
+  el.notice.classList.remove('hidden');
+  el.noticeTitle.textContent = title;
+  el.noticeText.textContent = text;
+  el.noticeLink.classList.add('hidden');
 
-  const azul = tipo === 'azul';
-  el.avisoCamada.classList.toggle('tela-azul', azul);
-  el.estaticaCanvas.classList.toggle('escondido', azul);
-  el.estaticaBarra.classList.toggle('escondido', azul);
-  if (azul) estatica.desligar();
-  else estatica.ligar();
+  const blue = kind === 'blue';
+  el.noticeLayer.classList.toggle('blue-screen', blue);
+  el.staticCanvas.classList.toggle('hidden', blue);
+  el.staticBar.classList.toggle('hidden', blue);
+  if (blue) staticNoise.stop();
+  else staticNoise.start();
 }
 
-function esconderAviso() {
-  el.aviso.classList.add('escondido');
-  estatica.desligar();
+function hideNotice() {
+  el.notice.classList.add('hidden');
+  staticNoise.stop();
 }
 
-function definirAoVivo(aoVivo) {
-  el.seloAoVivo.classList.toggle('escondido', !aoVivo);
+function setLive(live) {
+  el.liveBadge.classList.toggle('hidden', !live);
 }
 
-// ---------- Conexão com o apresentador ----------
+// ---------- Connection to the presenter ----------
 
-function agendarNovaTentativa() {
-  if (encerrada || tentativa) return;
-  tentativa = setTimeout(() => {
-    tentativa = null;
-    conectarAoApresentador();
-  }, INTERVALO_TENTATIVA);
+function scheduleRetry() {
+  if (ended || retryTimer) return;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    connectToPresenter();
+  }, RETRY_INTERVAL_MS);
 }
 
-function aguardandoApresentador() {
-  definirAoVivo(false);
-  mostrarAviso('Sem sinal', 'Aguardando o apresentador. Pode deixar esta página aberta.');
+function waitingForPresenter() {
+  setLive(false);
+  showNotice('Sem sinal', 'Aguardando o apresentador. Pode deixar esta página aberta.');
 }
 
-function conectarAoApresentador() {
-  if (encerrada || !peer || peer.disconnected || peer.destroyed) return;
-  conexao?.close();
-  const conn = peer.connect(idApresentador, { reliable: true });
-  conexao = conn;
+function connectToPresenter() {
+  if (ended || !peer || peer.disconnected || peer.destroyed) return;
+  connection?.close();
+  const conn = peer.connect(presenterId, { reliable: true });
+  connection = conn;
 
-  // Se não abrir em alguns segundos, o apresentador existe mas a rede
-  // bloqueou a conexão direta. Avisa e tenta de novo.
-  const limite = setTimeout(() => {
-    if (!conn.open && conexao === conn) {
+  // If it doesn't open within a few seconds, the presenter exists but the
+  // network blocked the direct connection. Warn and try again.
+  const timeout = setTimeout(() => {
+    if (!conn.open && connection === conn) {
       conn.close();
       if (!el.video.srcObject) {
-        mostrarAviso(
+        showNotice(
           'Sem conexão direta',
-          temTurn
+          hasTurn
             ? 'A rede bloqueou a conexão com o apresentador. Tentando de novo... Se continuar, cadastre um TURN seu.'
             : 'A rede bloqueou a conexão com o apresentador. Cadastre um TURN seu para resolver.',
-          'azul',
+          'blue',
         );
-        el.avisoLink.classList.remove('escondido');
+        el.noticeLink.classList.remove('hidden');
       }
-      agendarNovaTentativa();
+      scheduleRetry();
     }
-  }, 12000);
+  }, CONNECT_TIMEOUT_MS);
 
   conn.on('open', () => {
-    clearTimeout(limite);
-    atualizarBotaoReacoes();
+    clearTimeout(timeout);
+    updateReactionsButton();
   });
-  conn.on('data', tratarMensagem);
+  conn.on('data', handleMessage);
   conn.on('close', () => {
-    clearTimeout(limite);
-    if (conexao !== conn || encerrada) return;
-    conexao = null;
-    atualizarBotaoReacoes();
-    pararVideo();
-    aguardandoApresentador();
-    agendarNovaTentativa();
+    clearTimeout(timeout);
+    if (connection !== conn || ended) return;
+    connection = null;
+    updateReactionsButton();
+    stopVideo();
+    waitingForPresenter();
+    scheduleRetry();
   });
 }
 
-function tratarMensagem(mensagem) {
-  if (encerrada) return;
-  if (mensagem?.tipo === 'reacao') {
-    // O nosso próprio emoji já apareceu na hora do clique.
-    if (mensagem.de !== peer?.id) soltarEmoji(el.camadaReacoes, mensagem.emoji);
+function handleMessage(message) {
+  if (ended) return;
+  if (message?.type === 'reaction') {
+    // Our own emoji already showed up when we clicked.
+    if (message.from !== peer?.id) launchEmoji(el.reactionsLayer, message.emoji);
     return;
   }
-  if (mensagem?.tipo === 'encerrada') {
-    encerrar(mensagem.motivo);
+  if (message?.type === 'ended') {
+    endWatching(message.reason);
     return;
   }
-  if (mensagem?.tipo !== 'estado') return;
+  if (message?.type !== 'state') return;
 
-  const titulo = mensagem.titulo || 'Live no LetsWatch';
-  el.titulo.textContent = titulo;
-  document.title = `${titulo} · LetsWatch`;
-  el.espectadores.textContent = plural(mensagem.espectadores, 'pessoa', 'pessoas');
-  definirAoVivo(mensagem.aoVivo);
-  reacoesPermitidas = mensagem.reacoes !== false;
-  atualizarBotaoReacoes();
+  const title = message.title || 'Live no LetsWatch';
+  el.title.textContent = title;
+  document.title = `${title} · LetsWatch`;
+  el.viewers.textContent = plural(message.viewers, 'pessoa', 'pessoas');
+  setLive(message.live);
+  reactionsAllowed = message.reactions !== false;
+  updateReactionsButton();
 
-  if (!mensagem.aoVivo) {
-    pararVideo();
-    mostrarAviso('❚❚ Pausa', 'O apresentador está na sala. A tela aparece assim que ele apertar play.', 'azul');
+  if (!message.live) {
+    stopVideo();
+    showNotice('❚❚ Pausa', 'O apresentador está na sala. A tela aparece assim que ele apertar play.', 'blue');
   } else if (!el.video.srcObject) {
-    mostrarAviso('Sintonizando...', 'Carregando a tela');
+    showNotice('Sintonizando...', 'Carregando a tela');
   }
 }
 
-function receberChamada(novaChamada) {
-  // Só aceitamos vídeo vindo do apresentador desta sala.
-  if (novaChamada.peer !== idApresentador) {
-    novaChamada.close();
+function receiveCall(incoming) {
+  // Only accept video from this room's presenter.
+  if (incoming.peer !== presenterId) {
+    incoming.close();
     return;
   }
-  chamada?.close();
-  chamada = novaChamada;
-  novaChamada.answer(); // só recebemos; não enviamos nada
-  novaChamada.on('stream', (fluxo) => {
-    if (chamada !== novaChamada) return;
-    el.video.srcObject = fluxo;
-    tocar();
+  call?.close();
+  call = incoming;
+  incoming.answer(); // we only receive; we send nothing
+  incoming.on('stream', (stream) => {
+    if (call !== incoming) return;
+    el.video.srcObject = stream;
+    play();
   });
-  novaChamada.on('close', () => {
-    if (chamada === novaChamada) pararVideo();
+  incoming.on('close', () => {
+    if (call === incoming) stopVideo();
   });
 }
 
-function pararVideo() {
-  chamada?.close();
-  chamada = null;
+function stopVideo() {
+  call?.close();
+  call = null;
   el.video.srcObject = null;
-  el.osdPlay.classList.add('escondido');
-  el.ativarSom.classList.add('escondido');
+  el.osdPlay.classList.add('hidden');
+  el.unmute.classList.add('hidden');
 }
 
-function encerrar(motivo = '') {
-  encerrada = true;
-  atualizarBotaoReacoes();
-  clearTimeout(tentativa);
-  pararVideo();
-  definirAoVivo(false);
-  el.espectadores.textContent = '';
-  if (motivo === 'admin') {
-    mostrarAviso('■ Fim da fita', 'A live foi encerrada pelo administrador.', 'azul');
+function endWatching(reason = '') {
+  ended = true;
+  updateReactionsButton();
+  clearTimeout(retryTimer);
+  stopVideo();
+  setLive(false);
+  el.viewers.textContent = '';
+  if (reason === 'admin') {
+    showNotice('■ Fim da fita', 'A live foi encerrada pelo administrador.', 'blue');
   } else {
-    mostrarAviso('■ Fim da fita', 'A live terminou. Obrigada por assistir!', 'azul');
+    showNotice('■ Fim da fita', 'A live terminou. Obrigada por assistir!', 'blue');
   }
   setTimeout(() => peer?.destroy(), 300);
 }
 
-// ---------- Vídeo e som ----------
-// Os navegadores só deixam tocar com som depois de um clique na página.
-// Por isso começamos mudo e mostramos o botão "Ativar som".
+// ---------- Video and sound ----------
+// Browsers only allow playing with sound after a click on the page.
+// So we start muted and show the "Ativar som" button.
 
-async function tocar() {
+async function play() {
   try {
     await el.video.play();
   } catch {
-    // ainda sem permissão para tocar; o botão de som resolve
+    // not allowed to play yet; the sound button fixes it
   }
-  esconderAviso();
-  el.osdPlay.classList.remove('escondido');
-  // efeito de "ligar a TV"
-  el.video.classList.remove('ligando');
+  hideNotice();
+  el.osdPlay.classList.remove('hidden');
+  // "TV power-on" effect
+  el.video.classList.remove('power-on');
   void el.video.offsetWidth;
-  el.video.classList.add('ligando');
-  atualizarSom();
+  el.video.classList.add('power-on');
+  updateSound();
 }
 
-function atualizarSom() {
-  const mudo = el.video.muted;
-  el.iconeMudo.classList.toggle('escondido', !mudo);
-  el.iconeSom.classList.toggle('escondido', mudo);
-  el.ativarSom.classList.toggle('escondido', !mudo || !el.video.srcObject);
+function updateSound() {
+  const muted = el.video.muted;
+  el.iconMuted.classList.toggle('hidden', !muted);
+  el.iconSound.classList.toggle('hidden', muted);
+  el.unmute.classList.toggle('hidden', !muted || !el.video.srcObject);
 }
 
-function alternarSom() {
+function toggleSound() {
   el.video.muted = !el.video.muted;
   el.video.play().catch(() => {});
-  atualizarSom();
+  updateSound();
 }
 
-function alternarTelaCheia() {
+function toggleFullscreen() {
   if (document.fullscreenElement) {
     document.exitFullscreen();
     return;
   }
-  // Em tela cheia os controles somem, então já liga o som aqui
-  // (o clique conta como permissão do navegador para tocar com som).
+  // In fullscreen the controls are hidden, so turn the sound on here
+  // (the click counts as the browser's permission to play with sound).
   if (el.video.muted && el.video.srcObject) {
     el.video.muted = false;
     el.video.play().catch(() => {});
-    atualizarSom();
+    updateSound();
   }
-  if (el.palco.requestFullscreen) {
-    el.palco.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+  if (el.stage.requestFullscreen) {
+    el.stage.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
   } else if (el.video.webkitEnterFullscreen) {
     el.video.webkitEnterFullscreen(); // iPhone
   }
 }
 
-// Em tela cheia, esconde tudo e mostra só a tela. Para sair: Esc, F ou dois cliques.
+// In fullscreen, hide everything and show only the screen. To leave: Esc, F or double click.
 document.addEventListener('fullscreenchange', () => {
-  el.palco.classList.toggle('tela-cheia', Boolean(document.fullscreenElement));
+  el.stage.classList.toggle('fullscreen', Boolean(document.fullscreenElement));
 });
 
-async function alternarPip() {
+async function togglePip() {
   try {
     if (document.pictureInPictureElement) await document.exitPictureInPicture();
     else await el.video.requestPictureInPicture();
-  } catch (erro) {
-    console.warn(erro);
+  } catch (error) {
+    console.warn(error);
   }
 }
 
-function alternarPreencher() {
-  const ativo = el.palco.classList.toggle('preencher');
-  el.botaoPreencher.classList.toggle('ativo', ativo);
+function toggleFill() {
+  const active = el.stage.classList.toggle('fill');
+  el.fillBtn.classList.toggle('active', active);
 }
 
-// ---------- Reações (emojis) ----------
+// ---------- Reactions (emojis) ----------
 
-for (const emoji of REACOES) {
-  const botao = document.createElement('button');
-  botao.type = 'button';
-  botao.textContent = emoji;
-  botao.setAttribute('aria-label', `Enviar ${emoji}`);
-  botao.addEventListener('click', () => enviarReacao(emoji));
-  el.bandeja.append(botao);
+for (const emoji of REACTIONS) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = emoji;
+  button.setAttribute('aria-label', `Enviar ${emoji}`);
+  button.addEventListener('click', () => sendReaction(emoji));
+  el.tray.append(button);
 }
 
-function abrirBandeja(aberta) {
-  el.bandeja.classList.toggle('escondido', !aberta);
-  el.botaoReacoes.classList.toggle('ativo', aberta);
-  el.botaoReacoes.setAttribute('aria-expanded', String(aberta));
+function openTray(open) {
+  el.tray.classList.toggle('hidden', !open);
+  el.reactionsBtn.classList.toggle('active', open);
+  el.reactionsBtn.setAttribute('aria-expanded', String(open));
 }
 
-// O botão só aparece com o apresentador conectado e as reações ligadas.
-function atualizarBotaoReacoes() {
-  const pode = reacoesPermitidas && Boolean(conexao?.open) && !encerrada;
-  el.botaoReacoes.classList.toggle('escondido', !pode);
-  if (!pode) abrirBandeja(false);
+// The button only shows up with the presenter connected and reactions on.
+function updateReactionsButton() {
+  const allowed = reactionsAllowed && Boolean(connection?.open) && !ended;
+  el.reactionsBtn.classList.toggle('hidden', !allowed);
+  if (!allowed) openTray(false);
 }
 
-let ultimaReacao = 0;
-function enviarReacao(emoji) {
-  const agora = Date.now();
-  if (agora - ultimaReacao < 350 || !conexao?.open) return; // sem metralhadora de emojis
-  ultimaReacao = agora;
-  conexao.send({ tipo: 'reacao', emoji });
-  soltarEmoji(el.camadaReacoes, emoji);
+let lastReaction = 0;
+function sendReaction(emoji) {
+  const now = Date.now();
+  if (now - lastReaction < 350 || !connection?.open) return; // no emoji machine gun
+  lastReaction = now;
+  connection.send({ type: 'reaction', emoji });
+  launchEmoji(el.reactionsLayer, emoji);
 }
 
-el.botaoReacoes.addEventListener('click', (evento) => {
-  evento.stopPropagation();
-  abrirBandeja(el.bandeja.classList.contains('escondido'));
+el.reactionsBtn.addEventListener('click', (event) => {
+  event.stopPropagation();
+  openTray(el.tray.classList.contains('hidden'));
 });
-document.addEventListener('click', (evento) => {
-  if (!el.bandeja.contains(evento.target)) abrirBandeja(false);
+document.addEventListener('click', (event) => {
+  if (!el.tray.contains(event.target)) openTray(false);
 });
 
-// Efeito de TV de tubo (scanlines e cantos escuros). Fica salvo neste navegador.
-function definirCrt(ativo) {
-  el.palco.classList.toggle('crt', ativo);
-  el.botaoCrt.classList.toggle('ativo', ativo);
-  el.botaoCrt.setAttribute('aria-pressed', String(ativo));
+// Tube TV effect (scanlines and dark corners). Saved in this browser.
+function setCrt(active) {
+  el.stage.classList.toggle('crt', active);
+  el.crtBtn.classList.toggle('active', active);
+  el.crtBtn.setAttribute('aria-pressed', String(active));
   try {
-    localStorage.setItem(CHAVE_CRT, ativo ? '1' : '0');
+    localStorage.setItem(CRT_STORAGE_KEY, active ? '1' : '0');
   } catch {
-    // navegação anônima ou armazenamento bloqueado: tudo bem
+    // private window or blocked storage: that's fine
   }
 }
 
-// Começa DESLIGADO. Só liga se a pessoa ativou o CRT antes neste navegador.
-function crtSalvo() {
+// Starts OFF. Only turns on if the person enabled CRT before in this browser.
+function savedCrt() {
   try {
-    return localStorage.getItem(CHAVE_CRT) === '1';
+    return localStorage.getItem(CRT_STORAGE_KEY) === '1';
   } catch {
     return false;
   }
 }
 
-// Esconde os controles depois de alguns segundos sem mexer o mouse.
-let ocioso;
-function mostrarControles() {
-  el.palco.classList.remove('ocioso');
-  clearTimeout(ocioso);
-  ocioso = setTimeout(() => {
-    if (el.video.srcObject) el.palco.classList.add('ocioso');
+// Hides the controls after a few seconds without moving the mouse.
+let idleTimer;
+function showControls() {
+  el.stage.classList.remove('idle');
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    if (el.video.srcObject) el.stage.classList.add('idle');
   }, 3000);
 }
 
-// ---------- Início ----------
+// ---------- Startup ----------
 
-async function iniciar() {
-  definirCrt(crtSalvo());
+async function init() {
+  setCrt(savedCrt());
 
-  if (!codigo) {
-    mostrarAviso('Erro de leitura', 'Link inválido. Confira se ele foi copiado inteiro.', 'azul');
+  if (!code) {
+    showNotice('Erro de leitura', 'Link inválido. Confira se ele foi copiado inteiro.', 'blue');
     return;
   }
 
-  mostrarAviso('Sintonizando...');
-  const config = await carregarConfig();
-  temTurn = Boolean(config.temTurn);
-  peer = new Peer(opcoesDoPeer(config));
+  showNotice('Sintonizando...');
+  const config = await loadConfig();
+  hasTurn = Boolean(config.hasTurn);
+  peer = new Peer(peerOptions(config));
 
-  peer.on('open', () => conectarAoApresentador());
-  peer.on('call', receberChamada);
+  peer.on('open', () => connectToPresenter());
+  peer.on('call', receiveCall);
 
   peer.on('disconnected', () => {
-    if (encerrada) return;
+    if (ended) return;
     setTimeout(() => {
       if (!peer.destroyed && peer.disconnected) peer.reconnect();
     }, 2000);
   });
 
-  peer.on('error', (erro) => {
-    if (erro.type === 'peer-unavailable') {
-      // O apresentador ainda não abriu o painel (ou saiu).
-      if (!el.video.srcObject) aguardandoApresentador();
-      agendarNovaTentativa();
-    } else if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(erro.type)) {
-      if (!el.video.srcObject) mostrarAviso('Reconectando...', 'Verificando sua conexão com a internet.');
+  peer.on('error', (error) => {
+    if (error.type === 'peer-unavailable') {
+      // The presenter hasn't opened the panel yet (or left).
+      if (!el.video.srcObject) waitingForPresenter();
+      scheduleRetry();
+    } else if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(error.type)) {
+      if (!el.video.srcObject) showNotice('Reconectando...', 'Verificando sua conexão com a internet.');
     } else {
-      console.warn('PeerJS:', erro.type, erro);
+      console.warn('PeerJS:', error.type, error);
     }
   });
 }
 
-el.ativarSom.addEventListener('click', alternarSom);
-el.botaoSom.addEventListener('click', alternarSom);
-el.botaoTelaCheia.addEventListener('click', alternarTelaCheia);
-el.botaoPreencher.addEventListener('click', alternarPreencher);
-el.botaoCrt.addEventListener('click', () => definirCrt(!el.palco.classList.contains('crt')));
-el.video.addEventListener('dblclick', alternarTelaCheia);
+el.unmute.addEventListener('click', toggleSound);
+el.soundBtn.addEventListener('click', toggleSound);
+el.fullscreenBtn.addEventListener('click', toggleFullscreen);
+el.fillBtn.addEventListener('click', toggleFill);
+el.crtBtn.addEventListener('click', () => setCrt(!el.stage.classList.contains('crt')));
+el.video.addEventListener('dblclick', toggleFullscreen);
 
-if (document.pictureInPictureEnabled) el.botaoPip.addEventListener('click', alternarPip);
-else el.botaoPip.classList.add('escondido');
+if (document.pictureInPictureEnabled) el.pipBtn.addEventListener('click', togglePip);
+else el.pipBtn.classList.add('hidden');
 
-// Ao fechar a aba, desconecta na hora para a contagem do apresentador atualizar.
+// When the tab closes, disconnect right away so the presenter's count updates.
 window.addEventListener('pagehide', () => peer?.destroy());
 
-document.addEventListener('pointermove', mostrarControles);
-document.addEventListener('keydown', (evento) => {
-  if (evento.target.closest('input, textarea')) return;
-  if (evento.key === 'f' || evento.key === 'F') alternarTelaCheia();
-  if (evento.key === 'm' || evento.key === 'M') alternarSom();
-  mostrarControles();
+document.addEventListener('pointermove', showControls);
+document.addEventListener('keydown', (event) => {
+  if (event.target.closest('input, textarea')) return;
+  if (event.key === 'f' || event.key === 'F') toggleFullscreen();
+  if (event.key === 'm' || event.key === 'M') toggleSound();
+  showControls();
 });
 
-iniciar();
+init();

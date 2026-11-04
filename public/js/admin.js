@@ -1,102 +1,112 @@
-// Página /admin: encerra a live de qualquer sala aberta.
+// /admin page: ends the live of any open room.
 //
-// 1. Confere a senha no servidor (/api/admin) e recebe um token para a sala.
-// 2. Conecta ao painel do apresentador pelo PeerJS, com o papel "admin".
-// 3. Envia o comando com o token. O painel confere o token e encerra a live.
-import { carregarConfig, idDoApresentador, opcoesDoPeer } from './common.js';
+// 1. Checks the password on the server (/api/admin) and gets a token for the room.
+// 2. Connects to the presenter panel through PeerJS, with the "admin" role.
+// 3. Sends the command with the token. The panel checks the token and ends the live.
+import { loadConfig, peerOptions, presenterPeerId } from './common.js';
 
-const LIMITE = 15000;
+const TIMEOUT_MS = 15000;
 
-const form = document.getElementById('form-admin');
-const campoSenha = document.getElementById('senha');
-const campoSala = document.getElementById('sala');
-const botao = document.getElementById('botao-encerrar');
-const visor = document.getElementById('visor');
+const $ = (id) => document.getElementById(id);
+const form = $('admin-form');
+const passwordField = $('password');
+const roomField = $('room');
+const endBtn = $('end-btn');
+const display = $('display');
 
 let config = null;
 
-function mostrar(texto, tipo = '') {
-  visor.textContent = texto;
-  visor.dataset.tipo = tipo; // '', 'ok' ou 'erro'
+function show(text, state = '') {
+  display.textContent = text;
+  display.dataset.state = state; // '', 'ok' or 'error'
 }
 
-// Aceita o link de assistir, o link do painel ou só o código.
-function extrairCodigo(texto) {
-  const limpo = texto.trim();
-  const doLink = limpo.match(/\/(?:ver|transmitir)\/([A-Za-z0-9]{8})(?:[/?#]|$)/);
-  if (doLink) return doLink[1];
-  return /^[A-Za-z0-9]{8}$/.test(limpo) ? limpo : null;
+// Accepts the watch link, the panel link or just the code.
+function extractCode(text) {
+  const clean = text.trim();
+  const fromLink = clean.match(/\/(?:ver|transmitir)\/([A-Za-z0-9]{8})(?:[/?#]|$)/);
+  if (fromLink) return fromLink[1];
+  return /^[A-Za-z0-9]{8}$/.test(clean) ? clean : null;
 }
 
-async function pedirToken(senha, codigo) {
-  const resposta = await fetch('/api/admin', {
+async function requestToken(password, code) {
+  const response = await fetch('/api/admin', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ senha, codigo }),
+    body: JSON.stringify({ password, code }),
   });
-  const dados = await resposta.json().catch(() => ({}));
-  if (!resposta.ok) throw new Error(dados.erro || `Erro ${resposta.status}`);
-  return dados.token;
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `Erro ${response.status}`);
+  return data.token;
 }
 
-// Conecta ao painel e envia o comando. Resolve com uma mensagem de sucesso.
-function enviarComando(codigo, token) {
+// Connects to the panel and sends the command. Resolves with a success message.
+function sendEndCommand(code, token) {
   return new Promise((resolve, reject) => {
-    const peer = new Peer(opcoesDoPeer(config));
-    let terminou = false;
+    const peer = new Peer(peerOptions(config));
+    let done = false;
+    let connected = false; // did the connection to the panel open at all?
 
-    const acabar = (erro, mensagem) => {
-      if (terminou) return;
-      terminou = true;
-      clearTimeout(limite);
+    const finish = (error, message) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timeout);
       setTimeout(() => peer.destroy(), 300);
-      if (erro) reject(new Error(erro));
-      else resolve(mensagem);
+      if (error) reject(new Error(error));
+      else resolve(message);
     };
 
-    const limite = setTimeout(
-      () => acabar('Não deu para falar com o painel do apresentador. Tente de novo em instantes.'),
-      LIMITE,
-    );
-
-    peer.on('error', (erro) => {
-      if (erro.type === 'peer-unavailable') {
-        acabar('Essa live não está aberta agora: o painel do apresentador está fechado ou a live já terminou.');
+    const timeout = setTimeout(() => {
+      if (connected) {
+        // Connected, but the panel didn't answer the command: it is running an
+        // old version of the site, from before the admin option existed.
+        finish('O painel do apresentador está com uma versão antiga do site. Peça para recarregar o painel (F5) e tente de novo.');
       } else {
-        acabar(`Erro de conexão (${erro.type}).`);
+        finish('Não deu para conectar ao painel do apresentador (a rede pode ter bloqueado). Tente de novo em instantes.');
+      }
+    }, TIMEOUT_MS);
+
+    peer.on('error', (error) => {
+      if (error.type === 'peer-unavailable') {
+        finish('Essa live não está aberta agora: o painel do apresentador está fechado ou a live já terminou.');
+      } else {
+        finish(`Erro de conexão (${error.type}).`);
       }
     });
 
     peer.on('open', () => {
-      const conn = peer.connect(idDoApresentador(codigo), { reliable: true, metadata: { papel: 'admin' } });
-      conn.on('open', () => conn.send({ tipo: 'admin-encerrar', token }));
-      conn.on('data', (mensagem) => {
-        if (mensagem?.tipo === 'admin-ok') acabar(null, `Live ${codigo} encerrada.`);
-        if (mensagem?.tipo === 'admin-negado') acabar('O painel recusou o comando (token inválido).');
+      const conn = peer.connect(presenterPeerId(code), { reliable: true, metadata: { role: 'admin' } });
+      conn.on('open', () => {
+        connected = true;
+        conn.send({ type: 'admin-end', token });
+      });
+      conn.on('data', (message) => {
+        if (message?.type === 'admin-ok') finish(null, `Live ${code} encerrada.`);
+        if (message?.type === 'admin-denied') finish('O painel recusou o comando (token inválido).');
       });
     });
   });
 }
 
-form.addEventListener('submit', async (evento) => {
-  evento.preventDefault();
-  const codigo = extrairCodigo(campoSala.value);
-  if (!codigo) {
-    mostrar('Link ou código inválido', 'erro');
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const code = extractCode(roomField.value);
+  if (!code) {
+    show('Link ou código inválido', 'error');
     return;
   }
 
-  botao.disabled = true;
+  endBtn.disabled = true;
   try {
-    mostrar('Conferindo senha...');
-    const token = await pedirToken(campoSenha.value, codigo);
-    mostrar('Conectando à live...');
-    config ??= await carregarConfig();
-    mostrar(await enviarComando(codigo, token), 'ok');
-    campoSala.value = '';
-  } catch (erro) {
-    mostrar(erro.message, 'erro');
+    show('Conferindo senha...');
+    const token = await requestToken(passwordField.value, code);
+    show('Conectando à live...');
+    config ??= await loadConfig();
+    show(await sendEndCommand(code, token), 'ok');
+    roomField.value = '';
+  } catch (error) {
+    show(error.message, 'error');
   } finally {
-    botao.disabled = false;
+    endBtn.disabled = false;
   }
 });

@@ -105,7 +105,7 @@ export async function POST(request) {
     request.headers.get('x-signature-ed25519'),
     request.headers.get('x-signature-timestamp'),
   );
-  if (!valid) return new Response('Assinatura inválida', { status: 401 });
+  if (!valid) return new Response('Invalid signature', { status: 401 });
 
   const interaction = JSON.parse(body);
   if (interaction.type === INTERACTION_PING) return json({ type: RESPONSE_PONG });

@@ -459,7 +459,6 @@ code { font-family: var(--font-osd); font-size: 1.25em; color: var(--yellow); }
   background: rgba(242, 193, 78, .08); border: 1px solid rgba(242, 193, 78, .35); color: #f3e3b8;
 }
 .deck-notice b { color: var(--yellow); }
-#audio-input { max-width: 150px; }
 
 @media (max-width: 980px) {
   .panel-body { grid-template-columns: minmax(0, 1fr); padding: 16px; }

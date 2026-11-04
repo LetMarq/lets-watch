@@ -81,7 +81,6 @@
           <b>🔇 Transmitindo sem o som do computador.</b>
           <br>• <b>Guia do navegador:</b> ligue "Compartilhar também o áudio da guia" na janela de escolha.
           <br>• <b>Tela inteira:</b> marque "Compartilhar áudio do sistema" (Chrome ou Edge no Windows).
-          <br>• <b>Janela de um jogo ou programa:</b> no Chrome 141 ou mais novo, aparece uma opção de áudio ao escolher a janela; escolha abaixo se quer <b>só o som da janela</b> ou <b>todo o PC</b>. Em navegadores mais antigos, janelas vão sem som: use a tela inteira ou o VB-Cable (README).
           <br>Clique em <b>Trocar tela</b> para escolher de novo.
         </div>
 
@@ -90,35 +89,12 @@
           <span class="switch"><input type="checkbox" id="reactions-enabled" checked><span></span></span>
         </label>
 
-        <label class="toggle-row">
-          <span>Microfone / som extra<small>Liga a entrada escolhida abaixo</small></span>
-          <span class="switch"><input type="checkbox" id="mic"><span></span></span>
-        </label>
-
-        <div class="toggle-row">
-          <span>Entrada de som<small>Microfone, ou o som de um jogo pelo cabo virtual (veja o README)</small></span>
-          <select class="field" id="audio-input" aria-label="Entrada de som">
-            <option value="">Padrão do sistema</option>
-          </select>
-        </div>
-
-        <div class="toggle-row">
-          <span>Som ao compartilhar janela<small>Chrome 141+ (melhor no Windows 11). Vale na próxima escolha de tela.</small></span>
-          <select class="field" id="window-audio" aria-label="Som ao compartilhar janela">
-            <option value="window">Só da janela</option>
-            <option value="system">Todo o PC</option>
-            <option value="exclude">Sem som</option>
-          </select>
-        </div>
-
         <div class="toggle-row">
           <span>Qualidade<small id="quality-hint"></small></span>
           <select class="field" id="quality" aria-label="Qualidade">
             <option value="text">Texto</option>
             <option value="smooth">Fluido</option>
             <option value="movie">Filme</option>
-            <option value="game">Jogo 60fps</option>
-            <option value="gameHd">Jogo HD 60fps</option>
           </select>
         </div>
 
@@ -132,7 +108,7 @@
 
         <p class="turn-link">Rede bloqueando a conexão? <a href="/turn" target="_blank">Cadastre o seu TURN</a></p>
 
-        <p class="note" id="audio-note">Som do computador: funciona ao compartilhar uma <b>guia</b>, ou a <b>tela inteira</b> com "Compartilhar áudio do sistema" marcado. Janelas de programas e jogos vão sem som.</p>
+        <p class="note" id="audio-note">Para enviar o som do computador, marque "Compartilhar áudio" na janela de escolha. Funciona melhor ao compartilhar uma guia ou a tela inteira no Windows.</p>
       </aside>
     </main>
   </div>

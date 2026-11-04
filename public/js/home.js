@@ -1,65 +1,65 @@
-import { copiarTexto } from './common.js';
-import { criarEstatica } from './retro.js';
+// Home page: "records a tape" (creates a room) and shows the links.
+import { copyText } from './common.js';
+import { createStatic } from './retro.js';
 
-const form = document.getElementById('form-criar');
-const botaoCriar = form.querySelector('button[type="submit"]');
-const textoBotao = botaoCriar.textContent;
-const fita = document.getElementById('fita');
+const $ = (id) => document.getElementById(id);
+const form = $('create-form');
+const createBtn = form.querySelector('button[type="submit"]');
+const createBtnText = createBtn.textContent;
+const tape = $('tape');
 
-// A TV da página inicial fica "fora do ar" até a sala ser criada.
-const estatica = criarEstatica(document.getElementById('estatica'));
-estatica.ligar();
+// The home page TV stays "off the air" until the room is created.
+const staticNoise = createStatic($('static'));
+staticNoise.start();
 
-function mostrarTvPronta() {
-  estatica.desligar();
-  document.getElementById('estatica').classList.add('escondido');
-  document.getElementById('estatica-barra').classList.add('escondido');
-  document.getElementById('tv-sem-sinal').classList.add('escondido');
-  const pronta = document.getElementById('tv-pronta');
-  pronta.classList.remove('escondido');
-  pronta.classList.add('ligando');
+function showTvReady() {
+  staticNoise.stop();
+  $('static').classList.add('hidden');
+  $('static-bar').classList.add('hidden');
+  $('tv-no-signal').classList.add('hidden');
+  const ready = $('tv-ready');
+  ready.classList.remove('hidden');
+  ready.classList.add('power-on');
 }
 
-const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-form.addEventListener('submit', async (evento) => {
-  evento.preventDefault();
-  botaoCriar.disabled = true;
-  botaoCriar.textContent = '● Gravando...';
-  fita.classList.add('gravando');
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  createBtn.disabled = true;
+  createBtn.textContent = '● Gravando...';
+  tape.classList.add('recording');
 
   try {
-    const [resposta] = await Promise.all([
-      fetch('/api/criar', {
+    const [response] = await Promise.all([
+      fetch('/api/create', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ titulo: form.titulo.value }),
+        body: JSON.stringify({ title: $('title-input').value }),
       }),
-      esperar(900), // tempo de ver os carretéis girando
+      wait(900), // time to see the reels spinning
     ]);
-    if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
-    const sala = await resposta.json();
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const room = await response.json();
 
-    document.getElementById('etiqueta-titulo').textContent = sala.titulo || 'Live sem título';
-    document.getElementById('etiqueta-codigo').textContent = `FITA ${sala.codigo}`;
-    document.getElementById('link-publico').value = sala.linkPublico;
-    document.getElementById('link-apresentador').value = sala.linkApresentador;
-    document.getElementById('abrir-painel').href = sala.linkApresentador;
-    document.getElementById('formulario').classList.add('escondido');
-    document.getElementById('resultado').classList.remove('escondido');
-    mostrarTvPronta();
-  } catch (erro) {
-    console.error(erro);
+    $('sticker-title').textContent = room.title || 'Live sem título';
+    $('sticker-code').textContent = `FITA ${room.code}`;
+    $('watch-link').value = room.watchLink;
+    $('presenter-link').value = room.presenterLink;
+    $('open-panel').href = room.presenterLink;
+    $('create-section').classList.add('hidden');
+    $('result-section').classList.remove('hidden');
+    showTvReady();
+  } catch (error) {
+    console.error(error);
     alert('Não foi possível criar a sala. Tente de novo.');
   } finally {
-    fita.classList.remove('gravando');
-    botaoCriar.disabled = false;
-    botaoCriar.textContent = textoBotao;
+    tape.classList.remove('recording');
+    createBtn.disabled = false;
+    createBtn.textContent = createBtnText;
   }
 });
 
-document.querySelectorAll('[data-copiar]').forEach((botao) => {
-  botao.addEventListener('click', () => {
-    copiarTexto(document.getElementById(botao.dataset.copiar).value, botao);
-  });
+document.querySelectorAll('[data-copy]').forEach((button) => {
+  button.addEventListener('click', () => copyText($(button.dataset.copy).value, button));
 });
