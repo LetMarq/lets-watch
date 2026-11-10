@@ -106,7 +106,7 @@ The website already works without Discord. Every `git push` deploys a new versio
    ```
    and save. Discord tests the URL right away; if it fails, check `DISCORD_PUBLIC_KEY` and that you redeployed.
 
-### 4. Register `/live` and invite the bot
+### 4. Register the commands and invite the bot
 
 On your computer, copy `.env.example` to `.env`, fill in `DISCORD_APP_ID` and `DISCORD_BOT_TOKEN`, and run:
 
@@ -114,7 +114,9 @@ On your computer, copy `.env.example` to `.env`, fill in `DISCORD_APP_ID` and `D
 npm run register-command
 ```
 
-The script prints an invite link. Open it, pick your server and authorize. Now type `/live` (or `/live titulo: Movie night`).
+The script registers `/live` and `/help` and prints an invite link. Open it, pick your server and authorize. Now type `/live` (or `/live titulo: Movie night`).
+
+Run `npm run register-command` again whenever a command is added or changed (only after the new version is deployed, so Discord finds the code that handles it).
 
 > `.env` is in `.gitignore` and must never go to GitHub. If the token leaks, click **Reset Token** again.
 
@@ -122,12 +124,20 @@ The bot has no gateway connection (it only answers interactions through the endp
 
 ## Usage
 
+**`/help`** shows a quick guide (only to whoever typed it): creating, presenting, sharing sound, watching, and what to do when the picture is choppy, with buttons to the site and to the `/turn` page.
+
 1. **`/live`** on Discord: the bot posts a message with **Assistir** (watch) and **Sou o apresentador** (I'm the presenter).
 2. Whoever created it clicks **Sou o apresentador** and gets the panel link (only they can see it).
 3. In the panel, **Apresentar tela**: the browser opens the entire screen / window / tab picker.
 4. Everyone else clicks **Assistir**. People who arrive before the presenter wait and join automatically when the live starts.
 
-In the panel you can **switch screens** without dropping anyone, change the **quality** (Texto 1080p/15 fps, Fluido 720p/30 fps, Filme 1080p/30 fps) and see **how many people are watching**.
+In the panel you can **switch screens** without dropping anyone, change the **quality** and see **how many people are watching**.
+
+- **Fluido** (default): 720p, 30 fps. When the internet can't keep up, it lowers the resolution and keeps the motion smooth.
+- **Filme**: 1080p, 30 fps. Same behavior, needs more upload.
+- **Texto**: 1080p, 15 fps. Keeps text sharp and drops frames instead; good for slides and code, choppy for videos.
+
+While sharing, a small display under the viewer count shows, for each viewer, how the video is going out: direct or through TURN, resolution, fps, upload in Mbps, latency, and a ⚠ when the quality is being held back by the internet or the processor.
 
 **Reactions:** viewers can send emojis (👍 ❤️ 😂 😮 👏 🔥 🎉 😢) with the 😀 button. They float up on everyone's screen and on the panel's monitor. The presenter can turn them off with the **Reações** switch. Only emojis from the list are accepted, at most 6 every 3 seconds per person. They are hidden in fullscreen.
 
@@ -138,7 +148,11 @@ The watch page has sound, fill screen, picture-in-picture, fullscreen (shortcuts
 ### Limitations
 
 - **Presenting only works on a computer** (Chrome, Edge or Firefox). Watching works on any device.
-- **Computer sound:** sharing a **tab** sends its sound. For the **entire screen**, tick "Share system audio" in the picker (Chrome/Edge on Windows); this sends all PC sound, including Discord calls. **Windows of apps and games** are shared without sound: to stream a game with sound, share the entire screen with system audio.
+- **Computer sound without Discord voices:**
+  - **Tab:** sends only that tab's sound. The picker opens on the tab list.
+  - **Window** (games, apps): with `windowAudio: 'window'`, Chrome/Edge 141+ on Windows offer only the sound of the program that owns the window, so Discord voices are left out. Games must run in windowed or borderless mode to show up in the picker. Programs that play sound from a separate process may come out silent.
+  - **Entire screen:** "Share system audio" sends all PC sound, Discord calls included. The panel shows a warning while it's in use.
+  - Older browsers: route Discord to another output device, or use [VB-Cable](https://vb-audio.com/Cable/) to send only the game to the captured device.
 - **Presenter upload:** one copy is sent to each viewer. With 3 viewers at 1080p, that's about 6 to 8 Mbps of upload.
 - **Privacy:** since it's direct, people in the live can see each other's public IP. Fine among friends.
 - **Public PeerJS server:** free and without guarantees. If it becomes unstable, host your own (`PEER_*` variables).

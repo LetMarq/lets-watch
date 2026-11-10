@@ -3,7 +3,7 @@
 // someone uses /live or clicks one of the bot's buttons. That's why the bot
 // doesn't need to stay online 24/7 — it runs for free on Vercel.
 import crypto from 'node:crypto';
-import { createRoom, json, presenterLink } from '../lib/room.js';
+import { baseUrl, createRoom, json, presenterLink } from '../lib/room.js';
 
 const INTERACTION_PING = 1;
 const INTERACTION_COMMAND = 2;
@@ -77,6 +77,66 @@ function handleLiveCommand(request, interaction, user) {
   });
 }
 
+// /help: a quick guide that only the person who typed it can see.
+// The text is shown in Discord, so it stays in Portuguese.
+function handleHelpCommand(request) {
+  const site = baseUrl(request);
+  return json({
+    type: RESPONSE_MESSAGE,
+    data: {
+      flags: EPHEMERAL,
+      embeds: [
+        {
+          title: '📼 LetsWatch · Como usar',
+          description: 'Compartilhe a tela com a galera, direto no navegador. Sem login e sem instalar nada.',
+          color: EMBED_COLOR,
+          fields: [
+            {
+              name: '🎬 Criar uma live',
+              value: 'Digite `/live` ou `/live titulo: Noite de filme`. O bot posta a mensagem com o link para todo mundo.',
+            },
+            {
+              name: '📺 Apresentar',
+              value:
+                'Quem criou a live clica em **Sou o apresentador** e abre o painel no computador (Chrome, Edge ou Firefox). ' +
+                'Aperte **▶ Apresentar tela** e escolha a tela inteira, uma janela ou uma guia.',
+            },
+            {
+              name: '🔊 Som do computador',
+              value:
+                'Para deixar **as vozes do Discord de fora**, compartilhe a **janela** do jogo/programa ou a **guia** do vídeo e ligue a opção de áudio. ' +
+                'Janelas com som precisam do Edge ou Chrome 141+; o jogo precisa estar em modo janela ou sem bordas para aparecer na lista. ' +
+                'A **tela inteira** com "Compartilhar áudio do sistema" manda o som do PC todo, Discord junto.',
+            },
+            {
+              name: '👀 Assistir',
+              value:
+                'Clique em **▶ Assistir**. Funciona no celular também. Quem chega antes do apresentador espera e a tela aparece sozinha. ' +
+                'A página abre no mudo: clique em **Ativar som**. Atalhos: **F** tela cheia, **M** mudo, **↑ ↓** volume.',
+            },
+            {
+              name: '📶 Travando ou sem conexão?',
+              value:
+                'No painel, use a qualidade **Fluido** para vídeos e jogos. O visor embaixo da contagem mostra se o limite é a internet de quem transmite. ' +
+                'Se quem assiste ficar em "Sem conexão direta" (comum no 4G/5G), cadastre um TURN grátis no botão abaixo.',
+            },
+          ],
+          footer: { text: 'Rebobine antes de devolver' },
+        },
+      ],
+      components: [
+        {
+          type: 1,
+          components: [
+            { type: 2, style: 5, label: 'Abrir o LetsWatch', url: `${site}/` },
+            { type: 2, style: 5, label: 'Cadastrar meu TURN', url: `${site}/turn` },
+          ],
+        },
+      ],
+    },
+  });
+}
+
 function handlePresentButton(request, interaction, user) {
   const [, code, ownerId] = interaction.data.custom_id.split(':');
 
@@ -114,6 +174,10 @@ export async function POST(request) {
 
   if (interaction.type === INTERACTION_COMMAND && interaction.data?.name === 'live') {
     return handleLiveCommand(request, interaction, user);
+  }
+
+  if (interaction.type === INTERACTION_COMMAND && interaction.data?.name === 'help') {
+    return handleHelpCommand(request);
   }
 
   if (interaction.type === INTERACTION_BUTTON && PRESENT_BUTTON.test(interaction.data?.custom_id ?? '')) {

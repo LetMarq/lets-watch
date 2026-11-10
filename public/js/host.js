@@ -63,6 +63,7 @@ const el = {
   led: $('led'),
   idleNotice: $('idle-notice'),
   noAudioNotice: $('no-audio-notice'),
+  systemAudioNotice: $('system-audio-notice'),
   reactionsEnabled: $('reactions-enabled'),
   reactionsLayer: $('reactions'),
   sendStats: $('send-stats'),
@@ -394,9 +395,18 @@ async function pickScreen() {
       width: { ideal: preset.width },
       height: { ideal: preset.height },
       frameRate: { ideal: preset.fps, max: preset.fps },
+      // Opens the picker on the "tab" list: sharing a tab sends ONLY that
+      // tab's sound (no Discord voices, no notifications).
+      displaySurface: 'browser',
     },
     audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-    systemAudio: 'include', // offers "system audio" when sharing the entire screen
+    // Entire screen: offers "system audio" (all PC sound, Discord included).
+    // The panel shows a warning when it's in use.
+    systemAudio: 'include',
+    // Window (Chrome/Edge 141+ on Windows): offers ONLY the sound of the program
+    // that owns the window, e.g. a game without the Discord voices. Without this
+    // option the browser could offer the whole PC's sound for windows too.
+    windowAudio: 'window',
     selfBrowserSurface: 'exclude', // hides this very tab from the list
     surfaceSwitching: 'include', // allows switching tabs from Chrome's sharing bar
   });
@@ -577,9 +587,19 @@ setInterval(() => {
 
 // ---------- "No audio" notice ----------
 
+// 'browser' = a tab, 'window' = an app window, 'monitor' = the entire screen
+function sharedSurface() {
+  return currentScreen?.getVideoTracks()[0]?.getSettings().displaySurface ?? '';
+}
+
+// Two notices under the controls:
+// - no sound at all → how to turn it on;
+// - entire screen WITH sound → it's the whole PC's sound, Discord voices included.
+//   (Tabs and windows only send their own sound.)
 function updateNoAudioNotice() {
-  const screenHasNoAudio = Boolean(currentScreen) && currentScreen.getAudioTracks().length === 0;
-  el.noAudioNotice.classList.toggle('hidden', !screenHasNoAudio);
+  const hasAudio = Boolean(currentScreen?.getAudioTracks().length);
+  el.noAudioNotice.classList.toggle('hidden', !currentScreen || hasAudio);
+  el.systemAudioNotice.classList.toggle('hidden', !hasAudio || sharedSurface() !== 'monitor');
 }
 
 // ---------- Signaling server connection ----------

@@ -1,4 +1,4 @@
-// Registers the /live command on Discord. Run it once (and again only if the command changes):
+// Registers the /live and /help commands on Discord. Run it once (and again whenever the commands change):
 //   npm run register-command
 // Needs DISCORD_APP_ID and DISCORD_BOT_TOKEN in the .env file.
 try {
@@ -31,6 +31,13 @@ const commands = [
       },
     ],
   },
+  {
+    name: 'help',
+    description: 'Mostra como criar, apresentar e assistir uma live no LetsWatch',
+    type: 1,
+    contexts: [0, 1], // servers and DMs with the bot
+    integration_types: [0],
+  },
 ];
 
 const response = await fetch(`https://discord.com/api/v10/applications/${DISCORD_APP_ID}/commands`, {
@@ -47,7 +54,7 @@ if (!response.ok) {
   process.exit(1);
 }
 
-console.log('Command /live registered successfully!');
+console.log('Commands /live and /help registered successfully!');
 console.log(
   `Invite the bot to your server: https://discord.com/oauth2/authorize?client_id=${DISCORD_APP_ID}&scope=bot+applications.commands&permissions=0`,
 );
